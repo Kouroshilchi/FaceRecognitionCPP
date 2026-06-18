@@ -16,16 +16,16 @@ set(Torch_DIR "C:/libs/release/libtorch/share/cmake/Torch")
 find_package(Torch REQUIRED)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-add_executable(libtorch_project libtorch_project.cpp)
+add_executable(FaceRecognitionCPP src/main.cpp)
 
-target_link_libraries(libtorch_project ${TORCH_LIBRARIES})
+target_link_libraries(FaceRecognitionCPP ${TORCH_LIBRARIES})
 if(MSVC)
-    set_target_properties(libtorch_project PROPERTIES 
+    set_target_properties(FaceRecognitionCPP PROPERTIES 
         VS_DEBUGGER_ENVIRONMENT "PATH=%PATH%;${TORCH_INSTALL_PREFIX}/lib"
     )
 endif()
-target_compile_features(libtorch_project PRIVATE cxx_std_17)
-target_compile_options(libtorch_project PRIVATE /std:c++17)
+target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)
+target_compile_options(FaceRecognitionCPP PRIVATE /std:c++17)
 
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "C++ Flags: ${CMAKE_CXX_FLAGS}")
