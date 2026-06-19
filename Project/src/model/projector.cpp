@@ -1,7 +1,7 @@
-#include "../include/model/Body.h"
+#include "../include/model/projector.h"
 
 namespace model {
-    FaceRecognitionBody::FaceRecognitionBody(
+    FaceRecognitionProjector::FaceRecognitionProjector(
         int in_channel,
         int out_channel,
         int dropout
@@ -15,7 +15,7 @@ namespace model {
     }
 }
 
-FaceRecognitionBody::forward(torch::Tensor x) {
+FaceRecognitionProjector::forward(torch::Tensor x) {
     x = resblock1->forward(x);
     x = dropout_layer->forward(x);
     x = resblock2->forward(x);
