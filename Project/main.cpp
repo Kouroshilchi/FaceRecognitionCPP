@@ -24,12 +24,18 @@ int main(int argc, char* argv[]) {
 
         auto face_dataset = dataset::FaceDataset(dataset_root, image_size);
         const int64_t num_classes = face_dataset.num_classes();
+        const size_t dataset_size = face_dataset.size().value(); 
+        
         std::cout << "Classes found: " << num_classes << std::endl;
+        std::cout << "Dataset size: " << dataset_size << std::endl;
 
         auto data_loader = torch::data::make_data_loader(
             face_dataset.map(torch::data::transforms::Stack<>()),
-            torch::data::samplers::RandomSampler(face_dataset.size().value()),
+            torch::data::samplers::RandomSampler(dataset_size),
             torch::data::DataLoaderOptions().batch_size(batch_size));
+
+        const size_t total_batches = (dataset_size + batch_size - 1) / batch_size;
+        std::cout << "Total batches: " << total_batches << std::endl;
 
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
         auto arcface = model::ArcFace(embedding_dim, num_classes, 64.0, 0.5, false);
@@ -74,7 +80,7 @@ int main(int argc, char* argv[]) {
 
                 if (batch_index % 1 == 0) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
-                              << "Batch [" << batch_index << "/" << data_loader->size().value() << "] "
+                              << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss.item<double>() << std::endl;
                 }
             }
