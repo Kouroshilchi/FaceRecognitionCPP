@@ -29,6 +29,7 @@ torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
     x = resblock2->forward(x);
     x = resblock3->forward(x);
     x = resblock4->forward(x);
+    x = resblock5->forward(x);
     
     x = flatten->forward(x);
     
