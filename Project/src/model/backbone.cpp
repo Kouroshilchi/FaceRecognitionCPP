@@ -1,11 +1,10 @@
 #include "../include/model/backbone.h"
 
 namespace model {
-    FaceRecognitionBackBone::FaceRecognitionBackBone(
+    FaceRecognitionBackBoneImpl::FaceRecognitionBackBoneImpl(
         int num_channel,
         int output_channel,
-        int dropout,
-        std::string activation = "relu"
+        int dropout
     ) 
     {
         conv1 = register_module("conv1", 
@@ -27,8 +26,7 @@ namespace model {
             torch::nn::Dropout(dropout));
     }
 }
-
-FaceRecognitionBackBone::forward(torch::Tensor x) {
+torch::Tensor FaceRecognitionBackBoneImpl::forward(torch::Tensor x) {
     x = conv1->forward(x);
     x = bn1->forward(x);
     x = torch::relu(x);

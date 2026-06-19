@@ -11,7 +11,7 @@ bool testFaceRecognitionProjector(int in_channel, int out_dim, double dropout) {
         int img_height = 224;
         int img_width = 224;
         
-        auto model = std::make_shared<model::FaceRecognitionProjector>(in_channel, out_dim, dropout);
+        auto model = model::FaceRecognitionProjector(in_channel, out_dim, dropout);
         model->eval();
         
         std::cout << "✓ Model created successfully!" << std::endl;
@@ -47,7 +47,7 @@ bool testFaceRecognitionModel(int num_channel, int out_dim, double dropout) {
         int img_height = 224;
         int img_width = 224;
         
-        auto model = std::make_shared<model::FaceRecognitionModel>(num_channel, out_dim, dropout);
+        auto model = model::FaceRecognitionModel(num_channel, out_dim, dropout);
         model->eval();
         
         std::cout << "\n=== Testing Full FaceRecognitionModel ===" << std::endl;

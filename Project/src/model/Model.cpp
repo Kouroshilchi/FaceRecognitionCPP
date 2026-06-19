@@ -1,7 +1,7 @@
 #include "../include/model/Model.h"
 
 namespace model {
-    FaceRecognitionModel::FaceRecognitionModel(
+    FaceRecognitionModelImpl::FaceRecognitionModelImpl(
         int num_channel,
         int out_dim,
         int dropout
@@ -12,7 +12,7 @@ namespace model {
     }
 }
 
-torch::Tensor FaceRecognitionModel::forward(torch::Tensor x) {
+torch::Tensor FaceRecognitionModelImpl::forward(torch::Tensor x) {
     x = backbone->forward(x);
     x = projector->forward(x);
     return x;

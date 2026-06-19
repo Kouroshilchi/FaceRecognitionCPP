@@ -3,8 +3,8 @@
 #include "ResBlock.h"
 
 namespace model {
-    struct FaceRecognitionProjector : torch::nn::Module {
-        FaceRecognitionProjector(
+    struct FaceRecognitionProjectorImpl : torch::nn::Module {
+        FaceRecognitionProjectorImpl(
             int in_channel, 
             int out_dim,
             int dropout

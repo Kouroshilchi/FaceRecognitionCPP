@@ -6,7 +6,7 @@
 
 namespace model {
     struct FaceRecognitionModelImpl : torch::nn::Module {
-        FaceRecognitionModel(
+        FaceRecognitionModelImpl(
             int num_channel,
             int out_dim,
             int dropout
