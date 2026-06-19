@@ -7,8 +7,7 @@ namespace model {
         FaceRecognitionBackBone(
             int num_channel, 
             int output_channel,
-            int dropout, 
-            std::string activation = "relu" 
+            int dropout
         );
 
         torch::Tensor forward(torch::Tensor x);
