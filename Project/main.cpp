@@ -11,7 +11,7 @@ int main(int argc, char* argv[]) {
     try {
         const std::string dataset_root = (argc > 1)
             ? argv[1]
-            : "../data/cleaned_dataset/train";
+            : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\cleaned_dataset\\train";
 
         const int64_t batch_size = 16;
         const int64_t embedding_dim = 512;
