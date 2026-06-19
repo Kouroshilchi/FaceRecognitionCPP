@@ -3,23 +3,46 @@
 namespace model {
     FaceRecognitionProjector::FaceRecognitionProjector(
         int in_channel,
-        int out_channel,
+        int out_dim,
         int dropout
     )
     {
-        resblock1 = register_module("resblock1", ResBlockImpl(in_channel, 256));
-        resblock2 = register_module("resblock2", ResBlockImpl(256, 512));
-        resblock3 = register_module("resblock3", ResBlockImpl(512, 256));
-        resblock4 = register_module("resblock4", ResBlockImpl(256, out_channel));
+        resblock1 = register_module("resblock1", ResBlockImpl(in_channel, 128));
+        resblock2 = register_module("resblock2", ResBlockImpl(128, 256));
+        resblock3 = register_module("resblock3", ResBlockImpl(256, 512));
+        resblock4 = register_module("resblock4", ResBlockImpl(512, 512));
+        flatten = register_module("flatten", torch::nn::Flatten());
+        fc1 = register_module("fc1" , torch::nn::Linear(512 * 7 * 7, 512));
+        bn1 = register_module("bn1", torch::nn::BatchNorm1d(512));
+        relu = register_module("relu", torch::nn::ReLU());  
+        fc2 = register_module("fc2", torch::nn::Linear(512, 256));
+        bn2 = register_module("bn2", torch::nn::BatchNorm1d(256));
+        fc3 = register_module("fc3", torch::nn::Linear(256, out_dim));
+        bn3 = register_module("bn3", torch::nn::BatchNorm1d(out_dim));
         dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
     }
 }
 
-FaceRecognitionProjector::forward(torch::Tensor x) {
+torch::Tensor FaceRecognitionProjector::forward(torch::Tensor x) {
     x = resblock1->forward(x);
-    x = dropout_layer->forward(x);
     x = resblock2->forward(x);
     x = resblock3->forward(x);
     x = resblock4->forward(x);
+    
+    x = flatten->forward(x);
+    
+    x = fc1->forward(x);
+    x = bn1->forward(x);
+    x = relu->forward(x);
+    x = dropout_layer->forward(x);
+    
+    x = fc2->forward(x);
+    x = bn2->forward(x);
+    x = relu->forward(x);
+    x = dropout_layer->forward(x);
+    
+    x = fc3->forward(x);
+    x = bn3->forward(x);
+
     return x;
 }
