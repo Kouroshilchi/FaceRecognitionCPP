@@ -1,6 +1,6 @@
 #pragma once
 #include <torch/torch.h>
-#include <string>
+
 
 namespace model {
     struct FaceRecognitionBackBone : torch::nn::Module {

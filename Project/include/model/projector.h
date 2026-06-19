@@ -1,7 +1,6 @@
 #pragma once
 #include <torch/torch.h>
 #include "ResBlock.h"
-#include <string>
 
 namespace model {
     struct FaceRecognitionProjector : torch::nn::Module {
