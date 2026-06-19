@@ -3,7 +3,7 @@
 
 
 namespace model {
-    struct FaceRecognitionBackBone : torch::nn::Module {
+    struct FaceRecognitionBackBoneImpl : torch::nn::Module {
         FaceRecognitionBackBone(
             int num_channel, 
             int output_channel,
