@@ -20,10 +20,10 @@ namespace model {
         fc3 = register_module("fc3", torch::nn::Linear(256, out_dim));
         bn3 = register_module("bn3", torch::nn::BatchNorm1d(out_dim));
         dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
-        }
     }
+}
 
-    torch::Tensor FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
+torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
     x = resblock1->forward(x);
     x = resblock2->forward(x);
     x = resblock3->forward(x);

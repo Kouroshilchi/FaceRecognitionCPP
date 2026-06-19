@@ -25,8 +25,7 @@ namespace model {
         dropout_layer = register_module("dropout_layer", 
             torch::nn::Dropout(dropout));
     }
-}
-torch::Tensor FaceRecognitionBackBoneImpl::forward(torch::Tensor x) {
+    torch::Tensor FaceRecognitionBackBoneImpl::forward(torch::Tensor x) {
     x = conv1->forward(x);
     x = bn1->forward(x);
     x = torch::relu(x);
@@ -35,4 +34,5 @@ torch::Tensor FaceRecognitionBackBoneImpl::forward(torch::Tensor x) {
     x = torch::relu(x);
     x = dropout_layer->forward(x);
     return x;
+    }   
 }
