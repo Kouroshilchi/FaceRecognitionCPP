@@ -30,17 +30,17 @@ def crop_face(image_path, output_path):
 
         face_img = frame[y:y+h, x:x+w]
         if face_img.size == 0:
-            print(f"Warning: Empty crop for {image_path}")
+            # print(f"Warning: Empty crop for {image_path}")
             return False
 
         if face_img.shape[0] < 150 or face_img.shape[1] < 150:
-            print(f"Warning: Cropped face in {image_path} is smaller than 150x150 ({face_img.shape[1]}x{face_img.shape[0]})")
+            # print(f"Warning: Cropped face in {image_path} is smaller than 150x150 ({face_img.shape[1]}x{face_img.shape[0]})")
             return False
 
         cv2.imwrite(output_path, face_img)
         return True
     else:
-        print(f"Warning: No face detected in {image_path}")
+        # print(f"Warning: No face detected in {image_path}")
         return False
 
 def process_dataset(input_dir, output_dir):
