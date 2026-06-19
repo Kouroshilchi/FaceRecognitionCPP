@@ -1,4 +1,4 @@
-#include "test_model.cpp"
+#include "../tests/test_model.cpp"
 
 int main() {
     testFaceRecognitionProjector(3, 256, 0.5);
