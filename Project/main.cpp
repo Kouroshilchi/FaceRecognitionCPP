@@ -28,7 +28,8 @@ int main(int argc, char* argv[]) {
 
         auto data_loader = torch::data::make_data_loader(
             face_dataset.map(torch::data::transforms::Stack<>()),
-            torch::data::DataLoaderOptions().batch_size(batch_size).shuffle(true));
+            torch::data::samplers::RandomSampler(face_dataset.size().value()),
+            torch::data::DataLoaderOptions().batch_size(batch_size));
 
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
         auto arcface = model::ArcFace(embedding_dim, num_classes, 64.0, 0.5, false);
