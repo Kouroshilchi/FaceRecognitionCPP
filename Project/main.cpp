@@ -8,9 +8,6 @@
 #include "include/dataset/Dataset.h"
 
 
-void SaveModel(auto model , std::string = path){
-    torch::save(model , path);
-}
 
 
 int main(int argc, char* argv[]) {
@@ -97,7 +94,7 @@ int main(int argc, char* argv[]) {
         }
 
         std::cout << "Training complete." << std::endl;
-        SaveModel(model , "models/model.pt");
+        torch::save(model , "models/model.pt");
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "Error: " << ex.what() << std::endl;
