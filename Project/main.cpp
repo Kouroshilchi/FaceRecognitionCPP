@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
                 epoch_loss += loss.item<double>();
                 ++batch_index;
 
-                if (batch_index % 1 == 0) {
+                if (batch_index % 10 == 0) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss.item<double>() << std::endl;
