@@ -1,9 +1,7 @@
-#include "torch/torch.h"
-#include "include/model/Model.h"
-#include "include/dataset/Dataset.h"
-#include <iostream>
+#include "test_model.cpp"
 
-int main() 
-{
-    
+int main() {
+    testFaceRecognitionProjector(3, 256, 0.5);
+    testFaceRecognitionModel(3, 256, 0.5);
+    return 0;
 }
