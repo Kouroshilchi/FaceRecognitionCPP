@@ -14,9 +14,9 @@ int main(int argc, char* argv[]) {
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\cleaned_dataset\\train";
 
         const int64_t batch_size = 16;
-        const int64_t embedding_dim = 512;
-        const double dropout = 0.5;
-        const int64_t epochs = 2;
+        const int64_t embedding_dim = 256;
+        const double dropout = 0.2;
+        const int64_t epochs = 10;
         const cv::Size image_size{224, 224};
 
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
