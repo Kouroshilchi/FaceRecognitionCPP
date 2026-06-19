@@ -46,6 +46,16 @@ if(MSVC)
     )
 endif()
 
+if(MSVC)
+    add_custom_command(TARGET FaceRecognitionCPP POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${OPENCV_BIN_DIR}"
+        $<TARGET_FILE_DIR:FaceRecognitionCPP>
+        COMMENT "Copying OpenCV DLLs to output directory"
+    )
+endif()
+
+
 target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)
 target_compile_options(FaceRecognitionCPP PRIVATE /std:c++17)
 
