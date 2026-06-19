@@ -9,7 +9,7 @@ namespace model {
         FaceRecognitionModelImpl(
             int num_channel,
             int out_dim,
-            int dropout
+            double dropout
         );
 
         torch::Tensor forward(torch::Tensor x);

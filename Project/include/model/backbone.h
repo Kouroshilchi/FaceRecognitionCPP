@@ -7,7 +7,7 @@ namespace model {
         FaceRecognitionBackBoneImpl(
             int num_channel, 
             int output_channel,
-            int dropout
+            double dropout
         );
 
         torch::Tensor forward(torch::Tensor x);

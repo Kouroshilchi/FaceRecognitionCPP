@@ -4,7 +4,7 @@ namespace model {
     FaceRecognitionModelImpl::FaceRecognitionModelImpl(
         int num_channel,
         int out_dim,
-        int dropout
+        double dropout
     )
     {
         backbone = register_module("backbone", FaceRecognitionBackBone(num_channel, 64 , dropout));

@@ -4,7 +4,7 @@ namespace model {
     FaceRecognitionBackBoneImpl::FaceRecognitionBackBoneImpl(
         int num_channel,
         int output_channel,
-        int dropout
+        double dropout
     ) 
     {
         conv1 = register_module("conv1", 

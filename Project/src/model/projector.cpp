@@ -4,7 +4,7 @@ namespace model {
     FaceRecognitionProjectorImpl::FaceRecognitionProjectorImpl(
         int in_channel,
         int out_dim,
-        int dropout
+        double dropout
     )
     {
         resblock1 = register_module("resblock1", ResBlock(in_channel, 128 , 2));
