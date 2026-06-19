@@ -1,7 +1,7 @@
-#include "../include/model/Head.h"
+#include "../include/model/backbone.h"
 
 namespace model {
-    FaceRecognitionHead::FaceRecognitionHead(
+    FaceRecognitionBackBone::FaceRecognitionBackBone(
         int num_channel,
         int output_channel,
         int dropout,
@@ -28,7 +28,7 @@ namespace model {
     }
 }
 
-FaceRecognitionHead::forward(torch::Tensor x) {
+FaceRecognitionBackBone::forward(torch::Tensor x) {
     x = conv1->forward(x);
     x = bn1->forward(x);
     x = torch::relu(x);

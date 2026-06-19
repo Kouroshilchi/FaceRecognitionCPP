@@ -3,8 +3,8 @@
 #include <string>
 
 namespace model {
-    struct FaceRecognitionHead : torch::nn::Module {
-        FaceRecognitionHead(
+    struct FaceRecognitionBackBone : torch::nn::Module {
+        FaceRecognitionBackBone(
             int num_channel, 
             int output_channel,
             int dropout, 
@@ -20,5 +20,5 @@ namespace model {
         torch::nn::Dropout dropout_layer{nullptr};
         
     };
-    TORCH_MODULE(FaceRecognitionHead);
+    TORCH_MODULE(FaceRecognitionBackBone);
 }
