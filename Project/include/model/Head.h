@@ -6,6 +6,7 @@ namespace model {
     struct FaceRecognitionHead : torch::nn::Module {
         FaceRecognitionHead(
             int num_channel, 
+            int output_channel,
             int dropout, 
             std::string activation = "relu" 
         );
