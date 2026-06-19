@@ -7,6 +7,7 @@ namespace model {
     struct FaceRecognitionBody : torch::nn::Module {
         FaceRecognitionBody(
             int in_channel, 
+            int out_channel,
             int dropout
         );
 
