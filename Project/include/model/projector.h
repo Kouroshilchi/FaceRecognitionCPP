@@ -7,6 +7,7 @@ namespace model {
     struct FaceRecognitionProjector : torch::nn::Module {
         FaceRecognitionProjector(
             int in_channel, 
+            int out_dim,
             int dropout
         );
 
