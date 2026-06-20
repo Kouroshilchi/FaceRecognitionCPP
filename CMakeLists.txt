@@ -23,7 +23,7 @@ file(GLOB_RECURSE PROJECT_SOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/src/*.cpp"
 )
 add_executable(FaceRecognitionCPP
-    "${CMAKE_CURRENT_SOURCE_DIR}/Project/main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/image_comparison.cpp"
     ${PROJECT_SOURCE_FILES}
 )
 
