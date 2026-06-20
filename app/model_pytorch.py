@@ -6,11 +6,11 @@ import torch.nn.functional as F
 class ResBlock(nn.Module):
     def __init__(self, in_ch, out_ch, stride=1):
         super().__init__()
-        self.conv1    = nn.Conv2d(in_ch, out_ch, 3, stride=stride, padding=1, bias=False)
+        self.conv1    = nn.Conv2d(in_ch, out_ch, 3, stride=stride, padding=1)
         self.bn1      = nn.BatchNorm2d(out_ch)
-        self.conv2    = nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1, bias=False)
+        self.conv2    = nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1)
         self.bn2      = nn.BatchNorm2d(out_ch)
-        self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=stride, bias=False) \
+        self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=stride) \
                         if (in_ch != out_ch or stride != 1) else None
 
     def forward(self, x):
@@ -22,12 +22,12 @@ class ResBlock(nn.Module):
         return F.relu(out + identity)
 
 
-class BackBone(nn.Module):
+class backbone(nn.Module):
     def __init__(self, num_channel=3, output_channel=64, dropout=0.1):
         super().__init__()
-        self.conv1         = nn.Conv2d(num_channel, 64, 3, stride=1, padding=1, bias=False)
+        self.conv1         = nn.Conv2d(num_channel, 64, 3, stride=1, padding=1)
         self.bn1           = nn.BatchNorm2d(64)
-        self.conv2         = nn.Conv2d(64, output_channel, 3, stride=1, padding=1, bias=False)
+        self.conv2         = nn.Conv2d(64, output_channel, 3, stride=1, padding=1)
         self.bn2           = nn.BatchNorm2d(output_channel)
         self.dropout_layer = nn.Dropout(dropout)
 
@@ -37,7 +37,7 @@ class BackBone(nn.Module):
         return self.dropout_layer(x)
 
 
-class Projector(nn.Module):
+class projector(nn.Module):
     def __init__(self, in_channel=64, out_dim=128, dropout=0.1):
         super().__init__()
         self.resblock1     = ResBlock(in_channel, 128,  stride=2)
@@ -71,8 +71,8 @@ class Projector(nn.Module):
 class FaceRecognitionModel(nn.Module):
     def __init__(self, num_channel=3, out_dim=128, dropout=0.1):
         super().__init__()
-        self.backbone  = BackBone(num_channel, 64, dropout)
-        self.projector = Projector(64, out_dim, dropout)
+        self.backbone  = backbone(num_channel, 64, dropout)
+        self.projector = projector(64, out_dim, dropout)
 
     def forward(self, x):
         return self.projector(self.backbone(x))
@@ -85,27 +85,11 @@ def _remap_key(k: str) -> str:
 
 
 def load_model(weights_path: str, device=None) -> FaceRecognitionModel:
-    if device is None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
     model = FaceRecognitionModel(num_channel=3, out_dim=128, dropout=0.1)
-
-    raw = torch.load(weights_path, map_location='cpu', weights_only=False)
-
-    if isinstance(raw, dict):
-        remapped = {_remap_key(k): v for k, v in raw.items()}
-        missing, unexpected = model.load_state_dict(remapped, strict=False)
-        if missing:
-            print(f"[WARN] Missing keys ({len(missing)}): {missing[:5]} ...")
-        if unexpected:
-            print(f"[WARN] Unexpected keys ({len(unexpected)}): {unexpected[:5]} ...")
-    else:
-        raise ValueError(
-            f"Unexpected type from torch.load: {type(raw)}\n"
-        )
-
+    model.load_state_dict(torch.load(weights_path, map_location=device))
     model.to(device)
     model.eval()
-    print(f"✓ Model loaded from '{weights_path}' on {device}")
+    print(f"Model loaded from '{weights_path}' on {device}")
     return model
+
 

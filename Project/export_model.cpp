@@ -1,35 +1,47 @@
 #include <torch/torch.h>
 #include <iostream>
 #include "include/model/Model.h"
+#include <torch/csrc/jit/serialization/pickle.h>
+#include <fstream>
 
 int main() {
     try {
         const int64_t embedding_dim = 128;
-        const double  dropout       = 0.1;
+        const double dropout = 0.1;
 
-        std::cout << "Loading model from model.pt ..." << std::endl;
-        auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
+        std::cout << "Loading model..." << std::endl;
+        
+        auto model = model::FaceRecognitionModel(3, embedding_dim, dropout); 
         torch::load(model, "model.pt");
-        model->eval();
-        std::cout << "Model loaded!" << std::endl;
+        
+        
+        
+        std::cout << "Model loaded successfully!" << std::endl;
 
-        torch::serialize::OutputArchive archive;
 
-        for (const auto& pair : model->named_parameters()) {
-            archive.write(pair.key(), pair.value().cpu().detach());
-            std::cout << "  param: " << pair.key()
-                      << "  shape: " << pair.value().sizes() << std::endl;
+        torch::OrderedDict<std::string, torch::Tensor> state_dict;
+        for (const auto& p : model->named_parameters()) {
+            state_dict.insert(p.key(), p.value());
         }
-        for (const auto& pair : model->named_buffers()) {
-            archive.write(pair.key(), pair.value().cpu().detach());
-            std::cout << "  buffer: " << pair.key()
-                      << "  shape: " << pair.value().sizes() << std::endl;
+        for (const auto& b : model->named_buffers()) { 
+            state_dict.insert(b.key(), b.value());
         }
 
-        archive.save_to("model_weights.pt");
-        std::cout << "\nDone! model_weights.pt" << std::endl;
+        c10::Dict<std::string, at::Tensor> dict;
+        for (const auto& item : state_dict) {
+            dict.insert(item.key(), item.value());
+        }
+
+        auto bytes = torch::pickle_save(dict);
+
+        std::ofstream fout("model_weights.pt", std::ios::out | std::ios::binary);
+        fout.write(bytes.data(), bytes.size());
+        fout.close();
+        std::cout << "State dict saved to model_state.pt" << std::endl;
+
+        std::cout << "Done!" << std::endl;
+
         return 0;
-
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
