@@ -24,7 +24,7 @@ try:
             model = load_model(candidate, device)
             break
     else:
-        raise FileNotFoundError("model_weights.pt پیدا نشد. export_model.exe رو اجرا کن.")
+        raise FileNotFoundError("Error")
 except Exception as e:
     print(f"Error loading model: {e}")
     exit(1)
@@ -59,7 +59,6 @@ face_detection    = mp_face_detection.FaceDetection(model_selection=1, min_detec
 
 
 def get_embedding(face_img):
-    """تصویر BGR → embedding نرمالایز‌شده (1, 128)"""
     try:
         if face_img is None or face_img.size == 0:
             return None
@@ -67,7 +66,6 @@ def get_embedding(face_img):
         face_tensor = transform(face_pil).unsqueeze(0).to(device)
         with torch.no_grad():
             emb = model(face_tensor)
-        # نرمالایز برای cosine similarity
         emb = torch.nn.functional.normalize(emb, p=2, dim=1)
         return emb
     except Exception as e:
@@ -79,7 +77,7 @@ def compare_embedding(emb, threshold=0.7, k=5):
     if emb is None or index.ntotal == 0:
         return ["Unknown", 0]
 
-    emb_np = emb.cpu().numpy().astype('float32')          # (1, 128)
+    emb_np = emb.cpu().numpy().astype('float32')        
     distances, indices = index.search(emb_np, k=k)
 
     class_sims = {}

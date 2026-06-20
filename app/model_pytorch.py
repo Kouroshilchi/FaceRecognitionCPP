@@ -1,5 +1,3 @@
-# model_pytorch.py — معماری Python مطابق C++
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -104,7 +102,6 @@ def load_model(weights_path: str, device=None) -> FaceRecognitionModel:
     else:
         raise ValueError(
             f"Unexpected type from torch.load: {type(raw)}\n"
-            "مطمئن شو export_model.exe با موفقیت اجرا شده و model_weights.pt ساخته شده."
         )
 
     model.to(device)
@@ -112,11 +109,3 @@ def load_model(weights_path: str, device=None) -> FaceRecognitionModel:
     print(f"✓ Model loaded from '{weights_path}' on {device}")
     return model
 
-
-if __name__ == "__main__":
-    import sys
-    path = sys.argv[1] if len(sys.argv) > 1 else "model_weights.pt"
-    m = load_model(path)
-    with torch.no_grad():
-        out = m(torch.zeros(1, 3, 224, 224))
-    print(f"✓ Output shape: {out.shape}") 
