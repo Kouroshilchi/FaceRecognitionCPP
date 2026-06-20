@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
         const int64_t embedding_dim = 128;
         const double dropout = 0.1;
         const int64_t epochs = 10;
-        const cv::Size image_size{224, 224};
+        const cv::Size image_size{112, 112};
 
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
         std::cout << "Using device: " << device << std::endl;
