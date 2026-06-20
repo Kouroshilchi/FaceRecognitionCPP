@@ -19,21 +19,9 @@ torch::Tensor load_and_preprocess_image(const std::string& image_path, const cv:
 
     img_rgb.convertTo(img_rgb, CV_32F, 1.0 / 255.0);
 
-    std::vector<cv::Mat> channels;
-    cv::split(img_rgb, channels);
-
-    cv::Scalar mean(0.485, 0.456, 0.406);
-    cv::Scalar std(0.229, 0.224, 0.225);
-
-    for (int i = 0; i < 3; ++i) {
-        channels[i] = (channels[i] - mean[i]) / std[i];
-    }
-
-    cv::Mat normalized;
-    cv::merge(channels, normalized);
-
+    
     torch::Tensor tensor = torch::from_blob(
-        normalized.data,
+        img_rgb.data,  
         {image_size.height, image_size.width, 3},
         torch::kFloat32
     ).clone().permute({2, 0, 1}).unsqueeze(0); 
