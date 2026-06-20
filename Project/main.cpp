@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\cleaned_dataset\\train";
 
-        const int64_t batch_size = 8;
+        const int64_t batch_size = 16;
         const int64_t embedding_dim = 128;
         const double dropout = 0.1;
         const int64_t epochs = 10;
@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
                 epoch_loss += loss.item<double>();
                 ++batch_index;
 
-                if (batch_index % 10 == 0) {
+                if (batch_index % 100 == 0) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss.item<double>() << std::endl;
@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Epoch " << epoch << " finished. "
                       << "Average loss: " << (epoch_loss / std::max<int64_t>(batch_index, 1))
                       << std::endl;
-            torch::save(model , "models/model.pt");
+            torch::save(model , "model.pt");
             std::cout << "Model Saved" << std::endl;
         }
 
