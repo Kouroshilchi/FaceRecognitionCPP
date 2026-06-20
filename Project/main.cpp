@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\extracted_images";
 
-        const int64_t batch_size = 4;
+        const int64_t batch_size = 6;
         const int64_t embedding_dim = 128;
         const double dropout = 0.2;
         const int64_t epochs = 5;
@@ -82,10 +82,11 @@ int main(int argc, char* argv[]) {
                 epoch_loss += loss.item<double>();
                 ++batch_index;
 
-                if (batch_index % 100 == 0) {
+                if (batch_index % 1000 == 0) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss.item<double>() << std::endl;
+                              torch::save(model , "model.pt");
                 }
             }
             // double current_lr = scheduler.get_lr()[0];
