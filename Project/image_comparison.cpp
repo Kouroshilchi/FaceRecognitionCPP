@@ -72,16 +72,13 @@ int main(int argc, char* argv[]) {
         std::cout << "Image 1: " << image1_path << std::endl;
         std::cout << "Image 2: " << image2_path << std::endl;
 
-        // Configuration
         const int64_t embedding_dim = 128;
         const double dropout = 0.1;
         const cv::Size image_size{224, 224};
 
-        // Device selection
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
         std::cout << "Using device: " << device << std::endl;
 
-        // Load model
         std::cout << "\nLoading model from 'models/model.pt'..." << std::endl;
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
         torch::load(model, "model.pt");
