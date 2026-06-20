@@ -1,3 +1,4 @@
+
 #include <torch/torch.h>
 #include <torch/script.h>
 #include <iostream>
@@ -12,18 +13,15 @@ int main() {
 
         std::cout << "Loading model from model.pt ..." << std::endl;
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
-        torch::load(model, "../models/model.pt");
+        torch::load(model, "model.pt");
         model->to(device);
         model->eval();
-        std::cout << "Model loaded!" << std::endl;
+        std::cout << "Model loaded successfully!" << std::endl;
 
-        torch::Tensor example_input = torch::zeros({1, 3, 224, 224}, device);
-
-        std::cout << "Tracing model ..." << std::endl;
-        auto traced = torch::jit::trace(model, example_input);
+        auto scripted = torch::jit::script(model);
 
         std::cout << "Saving to torchscript.pt ..." << std::endl;
-        traced.save("torchscript.pt");
+        scripted.save("torchscript.pt");
 
         return 0;
 
