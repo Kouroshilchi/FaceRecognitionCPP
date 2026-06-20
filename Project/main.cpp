@@ -16,10 +16,10 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\extracted_images";
 
-        const int64_t batch_size = 8;
+        const int64_t batch_size = 4;
         const int64_t embedding_dim = 128;
-        const double dropout = 0.1;
-        const int64_t epochs = 10;
+        const double dropout = 0.2;
+        const int64_t epochs = 5;
         const cv::Size image_size{112, 112};
 
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Total batches: " << total_batches << std::endl;
 
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
-        auto arcface = model::ArcFace(embedding_dim, num_classes, 64.0, 0.5, false);
+        auto arcface = model::ArcFace(embedding_dim, num_classes, 42.0, 0.5, false);
 
         model->to(device);
         arcface->to(device);

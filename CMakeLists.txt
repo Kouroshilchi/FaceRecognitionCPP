@@ -28,6 +28,18 @@ add_executable(FaceRecognitionCPP
     ${PROJECT_SOURCE_FILES}
 )
 
+if(MSVC)
+    add_custom_command(TARGET FaceRecognitionCPP POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${OpenCV_DIR}/x64/vc16/bin/opencv_world4120.dll"
+            $<TARGET_FILE_DIR:FaceRecognitionCPP>)
+    
+    add_custom_command(TARGET FaceRecognitionCPP POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TORCH_INSTALL_PREFIX}/lib/torch.dll"
+            $<TARGET_FILE_DIR:FaceRecognitionCPP>)
+endif()
+
 target_include_directories(FaceRecognitionCPP PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
     ${TORCH_INCLUDE_DIRS}
@@ -40,11 +52,20 @@ target_link_libraries(FaceRecognitionCPP PRIVATE
 )
 
 if(MSVC)
-    set(OPENCV_BIN_DIR "${OpenCV_DIR}/x64/vc16/bin")
-    set(TORCH_BIN_DIR "${TORCH_INSTALL_PREFIX}/lib")
+    target_link_directories(FaceRecognitionCPP PRIVATE
+        "${OpenCV_DIR}/x64/vc16/bin"
+        "${TORCH_INSTALL_PREFIX}/lib"
+    )
     
     set_target_properties(FaceRecognitionCPP PROPERTIES 
-        VS_DEBUGGER_ENVIRONMENT "PATH=%PATH%;${TORCH_BIN_DIR};${OPENCV_BIN_DIR}"
+        VS_DEBUGGER_ENVIRONMENT "PATH=${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}"
+    )
+    
+    set(ENV{PATH} "${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}")
+    
+    source_group("External Libraries" FILES 
+        "${OpenCV_DIR}/x64/vc16/bin/opencv_world4120.dll"
+        "${TORCH_INSTALL_PREFIX}/lib/torch.dll"
     )
 endif()
 
@@ -55,3 +76,4 @@ message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "C++ Flags: ${CMAKE_CXX_FLAGS}")
 message(STATUS "OpenCV_DIR: ${OpenCV_DIR}")       
 message(STATUS "OpenCV_LIBS: ${OpenCV_LIBS}")
+message(STATUS "TORCH_INSTALL_PREFIX: ${TORCH_INSTALL_PREFIX}")
