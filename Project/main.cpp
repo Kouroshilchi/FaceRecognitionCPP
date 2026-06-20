@@ -17,7 +17,7 @@ int main(int argc, char* argv[]) {
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\cleaned_dataset\\train";
 
         const int64_t batch_size = 8;
-        const int64_t embedding_dim = 256;
+        const int64_t embedding_dim = 128;
         const double dropout = 0.1;
         const int64_t epochs = 10;
         const cv::Size image_size{224, 224};
@@ -94,10 +94,12 @@ int main(int argc, char* argv[]) {
             std::cout << "Epoch " << epoch << " finished. "
                       << "Average loss: " << (epoch_loss / std::max<int64_t>(batch_index, 1))
                       << std::endl;
+            torch::save(model , "models/model.pt");
+            std::cout << "Model Saved" << std::endl;
         }
 
         std::cout << "Training complete." << std::endl;
-        torch::save(model , "models/model.pt");
+        
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "Error: " << ex.what() << std::endl;
