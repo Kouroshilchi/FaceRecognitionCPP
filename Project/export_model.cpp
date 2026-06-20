@@ -1,6 +1,5 @@
 
 #include <torch/torch.h>
-#include <torch/script.h>
 #include <iostream>
 #include "include/model/Model.h"
 
@@ -9,22 +8,28 @@ int main() {
         const int64_t embedding_dim = 128;
         const double dropout = 0.1;
 
-        torch::Device device(torch::kCPU);
-
         std::cout << "Loading model from model.pt ..." << std::endl;
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
         torch::load(model, "model.pt");
-        model->to(device);
         model->eval();
-        std::cout << "Model loaded successfully!" << std::endl;
+        std::cout << "Model loaded!" << std::endl;
 
-        auto scripted = torch::jit::script(model);
+        std::vector<std::pair<std::string, torch::Tensor>> state_dict;
+        for (const auto& pair : model->named_parameters()) {
+            state_dict.emplace_back(pair.key(), pair.value().cpu().detach());
+            std::cout << "  Saving param: " << pair.key() 
+                      << " shape: " << pair.value().sizes() << std::endl;
+        }
+        for (const auto& pair : model->named_buffers()) {
+            state_dict.emplace_back(pair.key(), pair.value().cpu().detach());
+            std::cout << "  Saving buffer: " << pair.key() 
+                      << " shape: " << pair.value().sizes() << std::endl;
+        }
 
-        std::cout << "Saving to torchscript.pt ..." << std::endl;
-        scripted.save("torchscript.pt");
+        torch::save(state_dict, "model_weights.pt");
+
 
         return 0;
-
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
