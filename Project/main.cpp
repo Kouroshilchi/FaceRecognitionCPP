@@ -2,7 +2,7 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <string>
-
+#include <torch/optim/schedulers/step_lr.h>
 #include "include/model/Model.h"
 #include "include/model/ArcFace.h"
 #include "include/dataset/Dataset.h"
@@ -18,8 +18,8 @@ int main(int argc, char* argv[]) {
 
         const int64_t batch_size = 8;
         const int64_t embedding_dim = 256;
-        const double dropout = 0.2;
-        const int64_t epochs = 5;
+        const double dropout = 0.1;
+        const int64_t epochs = 10;
         const cv::Size image_size{224, 224};
 
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
@@ -58,7 +58,8 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        torch::optim::Adam optimizer(parameters, torch::optim::AdamOptions(1e-4));
+        torch::optim::Adam optimizer(parameters, torch::optim::AdamOptions(1e-3));
+        auto scheduler = torch::optim::StepLR(optimizer, /*step_size=*/5, /*gamma=*/0.5);
         torch::nn::CrossEntropyLoss criterion;
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
@@ -87,7 +88,9 @@ int main(int argc, char* argv[]) {
                               << "Loss: " << loss.item<double>() << std::endl;
                 }
             }
-
+            double current_lr = scheduler.get_last_lr()[0];
+            std::cout << "Epoch " << epoch << " LR: " << current_lr << std::endl;
+            scheduler.step(); 
             std::cout << "Epoch " << epoch << " finished. "
                       << "Average loss: " << (epoch_loss / std::max<int64_t>(batch_index, 1))
                       << std::endl;
