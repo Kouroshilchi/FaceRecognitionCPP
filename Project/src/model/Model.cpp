@@ -7,8 +7,8 @@ namespace model {
         double dropout
     )
     {
-        backbone = register_module("backbone", FaceRecognitionBackBone(num_channel, 64 , dropout));
-        projector = register_module("projector", FaceRecognitionProjector(64, out_dim, dropout));
+        backbone = register_module("backbone", FaceRecognitionBackBone(num_channel, 256 , dropout));
+        projector = register_module("projector", FaceRecognitionProjector(256, out_dim, dropout));
     }
 
     torch::Tensor FaceRecognitionModelImpl::forward(torch::Tensor x) {

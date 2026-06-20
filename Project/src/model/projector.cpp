@@ -7,13 +7,12 @@ namespace model {
         double dropout
     )
     {
-        resblock1 = register_module("resblock1", ResBlock(in_channel, 128 , 2));
-        resblock2 = register_module("resblock2", ResBlock(128, 256, 1));
-        resblock3 = register_module("resblock3", ResBlock(256, 512, 2));
+        resblock1 = register_module("resblock1", ResBlock(in_channel, 512 , 2));
+        resblock2 = register_module("resblock2", ResBlock(512, 512, 1));
+        resblock3 = register_module("resblock3", ResBlock(512, 512, 2));
         resblock4 = register_module("resblock4", ResBlock(512, 1024, 1));
-        resblock5 = register_module("resblock5", ResBlock(1024, 512, 2));
         flatten = register_module("flatten", torch::nn::Flatten());
-        fc1 = register_module("fc1" , torch::nn::Linear(512 * 28 * 28, 512));
+        fc1 = register_module("fc1" , torch::nn::Linear(1024 * 28 * 28, 512));
         bn1 = register_module("bn1", torch::nn::BatchNorm1d(512)); 
         relu = register_module("relu", torch::nn::ReLU());  
         fc2 = register_module("fc2", torch::nn::Linear(512, 512));
