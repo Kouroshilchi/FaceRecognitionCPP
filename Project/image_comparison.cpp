@@ -84,7 +84,7 @@ int main(int argc, char* argv[]) {
         // Load model
         std::cout << "\nLoading model from 'models/model.pt'..." << std::endl;
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
-        torch::load(model, "models/model.pt");
+        torch::load(model, "model.pt");
         model->to(device);
         model->eval();
         std::cout << "Model loaded successfully!" << std::endl;
