@@ -88,8 +88,8 @@ int main(int argc, char* argv[]) {
                               << "Loss: " << loss.item<double>() << std::endl;
                 }
             }
-            double current_lr = scheduler.get_last_lr()[0];
-            std::cout << "Epoch " << epoch << " LR: " << current_lr << std::endl;
+            // double current_lr = scheduler.get_lr()[0];
+            // std::cout << "Epoch " << epoch << " LR: " << current_lr << std::endl;
             scheduler.step(); 
             std::cout << "Epoch " << epoch << " finished. "
                       << "Average loss: " << (epoch_loss / std::max<int64_t>(batch_index, 1))
