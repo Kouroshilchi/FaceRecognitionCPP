@@ -14,14 +14,15 @@ set(CMAKE_PREFIX_PATH "C:/libs/release/libtorch")
 set(Torch_DIR "C:/libs/release/libtorch/share/cmake/Torch")
 find_package(Torch REQUIRED)
 
-
 set(OpenCV_DIR "C:/libs/opencv/build")  
 find_package(OpenCV REQUIRED)    
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+
 file(GLOB_RECURSE PROJECT_SOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/src/*.cpp"
 )
+
 add_executable(FaceRecognitionCPP 
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/export_model.cpp"
     ${PROJECT_SOURCE_FILES}
@@ -39,22 +40,13 @@ target_link_libraries(FaceRecognitionCPP PRIVATE
 )
 
 if(MSVC)
-    set(OPENCV_BIN_DIR "${OpenCV_DIR}/x64/vc16/bin") 
+    set(OPENCV_BIN_DIR "${OpenCV_DIR}/x64/vc16/bin")
+    set(TORCH_BIN_DIR "${TORCH_INSTALL_PREFIX}/lib")
     
     set_target_properties(FaceRecognitionCPP PROPERTIES 
-        VS_DEBUGGER_ENVIRONMENT "PATH=%PATH%;${TORCH_INSTALL_PREFIX}/lib;${OPENCV_BIN_DIR}"
+        VS_DEBUGGER_ENVIRONMENT "PATH=%PATH%;${TORCH_BIN_DIR};${OPENCV_BIN_DIR}"
     )
 endif()
-
-if(MSVC)
-    add_custom_command(TARGET FaceRecognitionCPP POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${OPENCV_BIN_DIR}"
-        $<TARGET_FILE_DIR:FaceRecognitionCPP>
-        COMMENT "Copying OpenCV DLLs to output directory"
-    )
-endif()
-
 
 target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)
 target_compile_options(FaceRecognitionCPP PRIVATE /std:c++17)
@@ -62,4 +54,4 @@ target_compile_options(FaceRecognitionCPP PRIVATE /std:c++17)
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "C++ Flags: ${CMAKE_CXX_FLAGS}")
 message(STATUS "OpenCV_DIR: ${OpenCV_DIR}")       
-message(STATUS "OpenCV_LIBS: ${OpenCV_LIBS}")     
+message(STATUS "OpenCV_LIBS: ${OpenCV_LIBS}")
