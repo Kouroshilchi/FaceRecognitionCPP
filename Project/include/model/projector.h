@@ -16,6 +16,8 @@ namespace model {
         ResBlock resblock2{nullptr};
         ResBlock resblock3{nullptr};
         ResBlock resblock4{nullptr};
+        ResBlock resblock5{nullptr};
+        ResBlock resblock6{nullptr};
         torch::nn::Linear fc1{nullptr};
         torch::nn::Flatten flatten{nullptr};
         torch::nn::BatchNorm1d bn1{nullptr};

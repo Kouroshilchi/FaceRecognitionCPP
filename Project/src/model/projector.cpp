@@ -7,15 +7,17 @@ namespace model {
         double dropout
     )
     {
-        resblock1 = register_module("resblock1", ResBlock(in_channel, 512 , 2));
-        resblock2 = register_module("resblock2", ResBlock(512, 512, 1));
-        resblock3 = register_module("resblock3", ResBlock(512, 512, 2));
-        resblock4 = register_module("resblock4", ResBlock(512, 1024, 1));
+        resblock1 = register_module("resblock1", ResBlock(in_channel, 256 , 2));
+        resblock2 = register_module("resblock2", ResBlock(256, 256, 1));
+        resblock3 = register_module("resblock3", ResBlock(256, 256, 2));
+        resblock4 = register_module("resblock4", ResBlock(256, 256, 1));
+        resblock5 = register_module("resblock5", ResBlock(256, 512, 2));
+        resblock6 = register_module("resblock6", ResBlock(512, 512, 2));
         flatten = register_module("flatten", torch::nn::Flatten());
-        fc1 = register_module("fc1" , torch::nn::Linear(1024 * 28 * 28, 512));
-        bn1 = register_module("bn1", torch::nn::BatchNorm1d(512)); 
+        fc1 = register_module("fc1" , torch::nn::Linear(512 * 7 * 7, 256));
+        bn1 = register_module("bn1", torch::nn::BatchNorm1d(256)); 
         relu = register_module("relu", torch::nn::ReLU());  
-        fc2 = register_module("fc2", torch::nn::Linear(512, 512));
+        fc2 = register_module("fc2", torch::nn::Linear(256, 512));
         bn2 = register_module("bn2", torch::nn::BatchNorm1d(512));
         fc3 = register_module("fc3", torch::nn::Linear(512, out_dim));
         bn3 = register_module("bn3", torch::nn::BatchNorm1d(out_dim));
@@ -28,7 +30,8 @@ torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
     x = resblock2->forward(x);
     x = resblock3->forward(x);
     x = resblock4->forward(x);
-    
+    x = resblock5->forward(x);
+    x = resblock6->forward(x);
     x = flatten->forward(x);
     
     x = fc1->forward(x);
