@@ -14,6 +14,8 @@ set(Torch_DIR "C:/libs/release/libtorch/share/cmake/Torch")
 find_package(Torch REQUIRED)
 
 set(OpenCV_DIR "C:/libs/opencv/build")
+set(IMGUI_DIR "C:/libs/imgui/imgui")
+
 find_package(OpenCV REQUIRED)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
@@ -44,28 +46,32 @@ if(MSVC)
     set_target_properties(FaceRecognitionCPP PROPERTIES
         VS_DEBUGGER_ENVIRONMENT "PATH=${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}"
     )
-    add_custom_command(TARGET FaceRecognitionCPP POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${OpenCV_DIR}/x64/vc16/bin/opencv_world4120.dll"
-            $<TARGET_FILE_DIR:FaceRecognitionCPP>)
-    add_custom_command(TARGET FaceRecognitionCPP POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${TORCH_INSTALL_PREFIX}/lib/torch.dll"
-            $<TARGET_FILE_DIR:FaceRecognitionCPP>)
 endif()
 
 add_executable(FaceRecognitionAPP
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/main.cpp"
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
     ${PROJECTAPP_SOURCE_FILES}
 )
 target_include_directories(FaceRecognitionAPP PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/include"
     ${TORCH_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
+    ${IMGUI_DIR} ${IMGUI_DIR}/backends
 )
 target_link_libraries(FaceRecognitionAPP PRIVATE
     ${TORCH_LIBRARIES}
     ${OpenCV_LIBS}
+    d3d11
+    d3dcompiler
+    dxgi
+    dwmapi
 )
 target_compile_features(FaceRecognitionAPP PRIVATE cxx_std_17)
 
@@ -77,14 +83,6 @@ if(MSVC)
     set_target_properties(FaceRecognitionAPP PROPERTIES
         VS_DEBUGGER_ENVIRONMENT "PATH=${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}"
     )
-    add_custom_command(TARGET FaceRecognitionAPP POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${OpenCV_DIR}/x64/vc16/bin/opencv_world4120.dll"
-            $<TARGET_FILE_DIR:FaceRecognitionAPP>)
-    add_custom_command(TARGET FaceRecognitionAPP POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${TORCH_INSTALL_PREFIX}/lib/torch.dll"
-            $<TARGET_FILE_DIR:FaceRecognitionAPP>)
 endif()
 
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
