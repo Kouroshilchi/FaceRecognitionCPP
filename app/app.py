@@ -31,7 +31,7 @@ except Exception as e:
 
 
 transform = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((112, 112)),
     transforms.ToTensor(),      
 ])
 
