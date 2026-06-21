@@ -25,28 +25,33 @@ class ResBlock(nn.Module):
 class backbone(nn.Module):
     def __init__(self, num_channel=3, output_channel=64, dropout=0.1):
         super().__init__()
-        self.conv1         = nn.Conv2d(num_channel, 64, 3, stride=1, padding=1)
-        self.bn1           = nn.BatchNorm2d(64)
-        self.conv2         = nn.Conv2d(64, output_channel, 3, stride=1, padding=1)
-        self.bn2           = nn.BatchNorm2d(output_channel)
+        self.conv1         = nn.Conv2d(num_channel, 32, 3, stride=1, padding=1)
+        self.bn1           = nn.BatchNorm2d(32)
+        self.conv2         = nn.Conv2d(32, 64, 3, stride=1, padding=1)
+        self.bn2           = nn.BatchNorm2d(64)
+        self.conv3         = nn.Conv2d(64, 128, 3, stride=1, padding=1)
+        self.bn3           = nn.BatchNorm2d(128)
+        self.conv4         = nn.Conv2d(128, output_channel, 3, stride=1, padding=1)
+        self.bn4           = nn.BatchNorm2d(output_channel)
         self.dropout_layer = nn.Dropout(dropout)
 
     def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.dropout_layer(F.relu(self.bn1(self.conv1(x))))
+        x = F.relu(self.bn2(self.conv2(x)))        
+        x = F.relu(self.bn1(self.conv3(x)))
+        x = F.relu(self.bn2(self.conv4(x)))
         return self.dropout_layer(x)
 
 
 class projector(nn.Module):
     def __init__(self, in_channel=64, out_dim=128, dropout=0.1):
         super().__init__()
-        self.resblock1     = ResBlock(in_channel, 128,  stride=2)
-        self.resblock2     = ResBlock(128,  256,  stride=1)
-        self.resblock3     = ResBlock(256,  512,  stride=2)
+        self.resblock1     = ResBlock(in_channel, 512,  stride=2)
+        self.resblock2     = ResBlock(512,  512,  stride=1)
+        self.resblock3     = ResBlock(512,  512,  stride=2)
         self.resblock4     = ResBlock(512,  1024, stride=1)
-        self.resblock5     = ResBlock(1024, 512,  stride=2)
         self.flatten       = nn.Flatten()
-        self.fc1           = nn.Linear(512 * 28 * 28, 512)
+        self.fc1           = nn.Linear(1024 * 28 * 28, 512)
         self.bn1           = nn.BatchNorm1d(512)
         self.relu          = nn.ReLU()
         self.fc2           = nn.Linear(512, 512)
@@ -60,7 +65,6 @@ class projector(nn.Module):
         x = self.resblock2(x)
         x = self.resblock3(x)
         x = self.resblock4(x)
-        x = self.resblock5(x)
         x = self.flatten(x)
         x = self.dropout_layer(self.relu(self.bn1(self.fc1(x))))
         x = self.dropout_layer(self.relu(self.bn2(self.fc2(x))))
@@ -71,17 +75,12 @@ class projector(nn.Module):
 class FaceRecognitionModel(nn.Module):
     def __init__(self, num_channel=3, out_dim=128, dropout=0.1):
         super().__init__()
-        self.backbone  = backbone(num_channel, 64, dropout)
-        self.projector = projector(64, out_dim, dropout)
+        self.backbone  = backbone(num_channel, 256, dropout)
+        self.projector = projector(256, out_dim, dropout)
 
     def forward(self, x):
         return self.projector(self.backbone(x))
 
-
-
-def _remap_key(k: str) -> str:
-
-    return k
 
 
 def load_model(weights_path: str, device=None) -> FaceRecognitionModel:
