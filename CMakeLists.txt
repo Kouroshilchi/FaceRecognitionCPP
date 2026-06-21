@@ -22,6 +22,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 file(GLOB_RECURSE PROJECT_SOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/src/*.cpp"
 )
+file(GLOB_RECURSE PROJECT_HEADER_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/include/*.h"
+)
 
 add_executable(FaceRecognitionCPP 
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/main.cpp"
