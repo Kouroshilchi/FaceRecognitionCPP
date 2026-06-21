@@ -79,7 +79,9 @@ def compare_embedding(emb, threshold=0.7, k=5):
 
     emb_np = emb.cpu().numpy().astype('float32')        
     distances, indices = index.search(emb_np, k=k)
-
+    
+    print(f"Raw distances: {distances}")  # این رو اضافه کن
+    
     class_sims = {}
     for dist, idx in zip(distances[0], indices[0]):
         if idx == -1:
@@ -93,10 +95,12 @@ def compare_embedding(emb, threshold=0.7, k=5):
         if avg > best_sim:
             best_sim, best_name = avg, name
 
+    print(f"best_sim: {best_sim}, best_name: {best_name}")  # و این
+    
     if best_sim > threshold:
-        return [best_name, round(best_sim * 100, 2)]
+        similarity_percentage = (best_sim + 1.0) / 2.0 * 100
+        return [best_name, round(similarity_percentage, 2)]
     return ["Unknown", 0]
-
 
 class FaceRecognitionApp(ctk.CTk):
     def __init__(self):
