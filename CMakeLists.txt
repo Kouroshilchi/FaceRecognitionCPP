@@ -24,7 +24,7 @@ file(GLOB_RECURSE PROJECT_SOURCE_FILES
 )
 
 add_executable(FaceRecognitionCPP 
-    "${CMAKE_CURRENT_SOURCE_DIR}/Project/export_model.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/main.cpp"
     ${PROJECT_SOURCE_FILES}
 )
 
