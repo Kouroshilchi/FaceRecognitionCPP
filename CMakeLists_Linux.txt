@@ -1,0 +1,127 @@
+cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
+project(FaceRecognitionCPP)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+get_filename_component(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR} ABSOLUTE)
+set(LIBRARY_DIR "${PROJECT_ROOT}/library")
+
+set(Torch_DIR "${LIBRARY_DIR}/libtorch/share/cmake/Torch")
+find_package(Torch REQUIRED)
+
+set(OpenCV_DIR "${LIBRARY_DIR}/opencv/build")
+find_package(OpenCV REQUIRED)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+
+file(GLOB_RECURSE PROJECT_SOURCE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/src/*.cpp"
+)
+file(GLOB_RECURSE PROJECT_HEADER_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/include/*.h"
+)
+
+add_executable(FaceRecognitionCPP 
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/main.cpp"
+    ${PROJECT_SOURCE_FILES}
+)
+
+target_include_directories(FaceRecognitionCPP PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
+    ${TORCH_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
+)
+
+target_link_libraries(FaceRecognitionCPP PRIVATE 
+    ${TORCH_LIBRARIES}
+    ${OpenCV_LIBS}
+)
+
+if(UNIX AND NOT APPLE)
+    set(SYSTEM_LIB_PATHS
+        "/usr/lib/x86_64-linux-gnu"
+        "/lib/x86_64-linux-gnu"
+        "/usr/local/cuda/lib64"
+        "/usr/local/cuda/lib64/stubs"
+    )
+    
+    set(PROJECT_LIB_PATHS
+        "${LIBRARY_DIR}/libtorch/lib"
+        "${LIBRARY_DIR}/opencv/build/lib"
+    )
+    
+    foreach(LIB_PATH ${SYSTEM_LIB_PATHS} ${PROJECT_LIB_PATHS})
+        target_link_directories(FaceRecognitionCPP PRIVATE ${LIB_PATH})
+    endforeach()
+    
+    set_target_properties(FaceRecognitionCPP PROPERTIES
+        BUILD_RPATH "${PROJECT_LIB_PATHS};${SYSTEM_LIB_PATHS}"
+        INSTALL_RPATH "${PROJECT_LIB_PATHS};${SYSTEM_LIB_PATHS}"
+        SKIP_BUILD_RPATH FALSE
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+    )
+    
+    target_link_options(FaceRecognitionCPP PRIVATE
+        "-L/usr/lib/x86_64-linux-gnu"
+        "-L/lib/x86_64-linux-gnu"
+        "-L/usr/local/cuda/lib64"
+        "-Wl,-rpath,/usr/lib/x86_64-linux-gnu"
+        "-Wl,-rpath,/lib/x86_64-linux-gnu"
+        "-Wl,-rpath,/usr/local/cuda/lib64"
+        "-Wl,-rpath,${LIBRARY_DIR}/libtorch/lib"
+        "-Wl,-rpath,${LIBRARY_DIR}/opencv/build/lib"
+        "-Wl,--allow-shlib-undefined"
+    )
+
+    find_library(NCCL_LIBRARY
+        NAMES nccl
+        PATHS /usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /usr/local/cuda/lib64
+        REQUIRED
+    )
+    
+    if(NCCL_LIBRARY)
+        message(STATUS "Found NCCL: ${NCCL_LIBRARY}")
+        target_link_libraries(FaceRecognitionCPP PRIVATE ${NCCL_LIBRARY})
+    else()
+        message(WARNING "NCCL not found - trying direct linking")
+        target_link_libraries(FaceRecognitionCPP PRIVATE nccl)
+    endif()
+    
+    target_link_libraries(FaceRecognitionCPP PRIVATE
+        cudart
+        cuda
+        dl
+        pthread
+        rt
+    )
+    
+    find_package(OpenMP)
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(FaceRecognitionCPP PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+endif()
+
+target_compile_options(FaceRecognitionCPP PRIVATE
+    -Wall
+    -Wextra
+    -O2
+    -g
+    -fPIC
+)
+
+target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)
+
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "C++ Flags: ${CMAKE_CXX_FLAGS}")
+message(STATUS "Library Directory: ${LIBRARY_DIR}")
+message(STATUS "OpenCV_DIR: ${OpenCV_DIR}")
+message(STATUS "OpenCV_LIBS: ${OpenCV_LIBS}")
+message(STATUS "TORCH_INSTALL_PREFIX: ${TORCH_INSTALL_PREFIX}")
+message(STATUS "TORCH_LIBRARIES: ${TORCH_LIBRARIES}")
+message(STATUS "========================================")
+message(STATUS "System Library Paths: ${SYSTEM_LIB_PATHS}")
+message(STATUS "Project Library Paths: ${PROJECT_LIB_PATHS}")
+message(STATUS "========================================")
