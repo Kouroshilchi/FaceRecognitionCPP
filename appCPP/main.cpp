@@ -19,7 +19,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     ImGui_ImplWin32_EnableDpiAwareness();
-    float main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
+    float main_scale = 1.0f;
 
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Window", nullptr };
     ::RegisterClassExW(&wc);
@@ -71,12 +71,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-
-        // Your code here
+        
+        //////////////////////////////////////////////////////////////////////
+        //                                                                  //
+        //                              code                                //
+        //                                                                  //
+        //////////////////////////////////////////////////////////////////////
 
         ImGui::Render();
         g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
-        g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, (float*)&ImVec4(0.45f, 0.55f, 0.60f, 1.00f));
+        ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+        g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, (float*)&clear_color);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
         g_pSwapChain->Present(1, 0);
