@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 project(FaceRecognitionCPP)
+add_definitions(-DNOMINMAX)
 
+add_definitions(-DWIN32_LEAN_AND_MEAN)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -14,9 +16,9 @@ set(Torch_DIR "C:/libs/release/libtorch/share/cmake/Torch")
 find_package(Torch REQUIRED)
 
 set(OpenCV_DIR "C:/libs/opencv/build")
-set(IMGUI_DIR "C:/libs/imgui/imgui")
-
 find_package(OpenCV REQUIRED)
+
+set(IMGUI_DIR "C:/libs/imgui/imgui")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
@@ -27,64 +29,65 @@ add_executable(FaceRecognitionCPP
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/main.cpp"
     ${PROJECT_SOURCE_FILES}
 )
+
 target_include_directories(FaceRecognitionCPP PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
     ${TORCH_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
+
 target_link_libraries(FaceRecognitionCPP PRIVATE
     ${TORCH_LIBRARIES}
     ${OpenCV_LIBS}
 )
+
 target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)
 
-if(MSVC)
-    target_link_directories(FaceRecognitionCPP PRIVATE
-        "${OpenCV_DIR}/x64/vc16/bin"
-        "${TORCH_INSTALL_PREFIX}/lib"
-    )
-    set_target_properties(FaceRecognitionCPP PROPERTIES
-        VS_DEBUGGER_ENVIRONMENT "PATH=${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}"
-    )
-endif()
- 
 add_executable(FaceRecognitionAPP WIN32 
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/main.cpp"
-    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui.cpp 
     ${IMGUI_DIR}/imgui_draw.cpp
-    ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp 
+    ${IMGUI_DIR}/imgui_tables.cpp 
     ${IMGUI_DIR}/imgui_demo.cpp
     ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
     ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
-    ${PROJECTAPP_SOURCE_FILES}
+    ${PROJECTAPP_SOURCE_FILES} 
 )
+
 target_include_directories(FaceRecognitionAPP PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/include"
-    ${TORCH_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS}
-    ${IMGUI_DIR} ${IMGUI_DIR}/backends
+    ${TORCH_INCLUDE_DIRS}       
+    ${OpenCV_INCLUDE_DIRS}       
+    ${IMGUI_DIR} 
+    ${IMGUI_DIR}/backends
 )
+
 target_link_libraries(FaceRecognitionAPP PRIVATE
-    ${TORCH_LIBRARIES}
-    ${OpenCV_LIBS}
+    ${TORCH_LIBRARIES}           
+    ${OpenCV_LIBS}               
     d3d11
     d3dcompiler
     dxgi
     dwmapi
 )
+
 target_compile_features(FaceRecognitionAPP PRIVATE cxx_std_17)
 
 if(MSVC)
-    target_link_directories(FaceRecognitionAPP PRIVATE
-        "${OpenCV_DIR}/x64/vc16/bin"
-        "${TORCH_INSTALL_PREFIX}/lib"
-    )
-    set_target_properties(FaceRecognitionAPP PROPERTIES
-        VS_DEBUGGER_ENVIRONMENT "PATH=${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}"
-    )
+    foreach(target FaceRecognitionCPP FaceRecognitionAPP)
+        target_link_directories(${target} PRIVATE
+            "${OpenCV_DIR}/x64/vc16/bin"
+            "${TORCH_INSTALL_PREFIX}/lib"
+        )
+        set_target_properties(${target} PROPERTIES
+            VS_DEBUGGER_ENVIRONMENT "PATH=${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}"
+        )
+    endforeach()
 endif()
 
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "OpenCV_DIR: ${OpenCV_DIR}")
 message(STATUS "TORCH_INSTALL_PREFIX: ${TORCH_INSTALL_PREFIX}")
+message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
+message(STATUS "Torch libraries: ${TORCH_LIBRARIES}")
