@@ -86,16 +86,14 @@ int main(int argc, char* argv[]) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss.item<double>() << std::endl;
-                              torch::save(model , "model.pt");
+                              torch::save(model , "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model.pt");
                 }
             }
-            // double current_lr = scheduler.get_lr()[0];
-            // std::cout << "Epoch " << epoch << " LR: " << current_lr << std::endl;
             scheduler.step(); 
             std::cout << "Epoch " << epoch << " finished. "
                       << "Average loss: " << (epoch_loss / std::max<int64_t>(batch_index, 1))
                       << std::endl;
-            torch::save(model , "model.pt");
+            torch::save(model , "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model.pt");
             std::cout << "Model Saved" << std::endl;
         }
 
