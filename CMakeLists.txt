@@ -47,8 +47,8 @@ if(MSVC)
         VS_DEBUGGER_ENVIRONMENT "PATH=${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}"
     )
 endif()
-
-add_executable(FaceRecognitionAPP
+ 
+add_executable(FaceRecognitionAPP WIN32 
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/main.cpp"
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
