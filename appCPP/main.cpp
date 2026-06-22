@@ -2,13 +2,37 @@
 #include "imgui_impl_dx11.h"
 #include <d3d11.h>
 #include <tchar.h>
+#include <torch/torch.h>
+#include <opencv2/opencv.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/highgui.hpp>
+#include <iostream>
+#include <string>
+#include "../Project/include/model/Model.h"
 
-static ID3D11Device*            g_pd3dDevice = nullptr;
-static ID3D11DeviceContext*     g_pd3dDeviceContext = nullptr;
-static IDXGISwapChain*          g_pSwapChain = nullptr;
-static ID3D11RenderTargetView*  g_mainRenderTargetView = nullptr;
-static bool                     g_SwapChainOccluded = false;
-static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
+using namespace cv;
+
+VideoCapture open_webcam() {
+    VideoCapture cap;
+    int deviceID = 0;
+    int apiID = CAP_ANY;
+
+    cap.open(deviceID, apiID);
+    if (!cap.isOpened()) {
+        std::cerr << "ERROR! Unable to open camera\n";
+        exit(-1);
+    }
+    return cap;
+}
+
+static ID3D11Device*            g_pd3dDevice            = nullptr;
+static ID3D11DeviceContext*     g_pd3dDeviceContext     = nullptr;
+static IDXGISwapChain*          g_pSwapChain            = nullptr;
+static ID3D11RenderTargetView*  g_mainRenderTargetView  = nullptr;
+static bool                     g_SwapChainOccluded     = false;
+static UINT                     g_ResizeWidth           = 0, g_ResizeHeight = 0;
+static ID3D11Texture2D*         g_pWebcamTexture        = nullptr;
+static ID3D11ShaderResourceView* g_pWebcamSRV           = nullptr;
 
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
@@ -16,8 +40,7 @@ void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
-{
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     ImGui_ImplWin32_EnableDpiAwareness();
     float main_scale = 1.0f;
 
@@ -44,8 +67,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
     bool done = false;
-    while (!done)
-    {
+
+    VideoCapture cap = open_webcam();
+    Mat frame;
+
+    cap >> frame;
+    if (frame.empty()) {
+        std::cerr << "ERROR! Camera opened but returned empty frame\n";
+        ImGui_ImplDX11_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext();
+        CleanupDeviceD3D();
+        ::DestroyWindow(hwnd);
+        ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        return 1;
+    }
+
+    for (int i = 0; i < 5; i++) cap >> frame;
+
+    while (!done) {
         MSG msg;
         while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE)) {
             ::TranslateMessage(&msg);
@@ -71,12 +111,75 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        
-        //////////////////////////////////////////////////////////////////////
-        //                                                                  //
-        //                              code                                //
-        //                                                                  //
-        //////////////////////////////////////////////////////////////////////
+
+        cap >> frame;
+        if (frame.empty()) {
+            std::cerr << "ERROR! blank frame grabbed\n";
+            break;
+        }
+
+        if (g_pWebcamTexture == nullptr) {
+            D3D11_TEXTURE2D_DESC desc = {};
+            desc.Width          = (UINT)frame.cols;
+            desc.Height         = (UINT)frame.rows;
+            desc.MipLevels      = 1;
+            desc.ArraySize      = 1;
+            desc.Format         = DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.SampleDesc.Count = 1;
+            desc.Usage          = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags      = D3D11_BIND_SHADER_RESOURCE;  
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+            HRESULT hr = g_pd3dDevice->CreateTexture2D(&desc, nullptr, &g_pWebcamTexture);
+            if (FAILED(hr)) {
+                std::cerr << "CreateTexture2D failed: 0x" << std::hex << hr << std::endl;
+                break;
+            }
+
+            D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+            srvDesc.Format                    = desc.Format;
+            srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D.MipLevels       = 1;
+            srvDesc.Texture2D.MostDetailedMip = 0;
+
+            hr = g_pd3dDevice->CreateShaderResourceView(g_pWebcamTexture, &srvDesc, &g_pWebcamSRV);
+            if (FAILED(hr)) {
+                std::cerr << "CreateShaderResourceView failed: 0x" << std::hex << hr << std::endl;
+                g_pWebcamTexture->Release();
+                g_pWebcamTexture = nullptr;
+                break;
+            }
+        }
+
+        cv::Mat rgba;
+        cv::cvtColor(frame, rgba, cv::COLOR_BGR2RGBA);
+
+        D3D11_MAPPED_SUBRESOURCE mappedResource;
+        HRESULT hr = g_pd3dDeviceContext->Map(g_pWebcamTexture, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+        if (SUCCEEDED(hr)) {
+            BYTE* pDest       = (BYTE*)mappedResource.pData;
+            const BYTE* pSrc  = rgba.data;
+            int rowPitch      = mappedResource.RowPitch;
+            int srcStep       = (int)rgba.step;
+            int widthBytes    = frame.cols * 4;
+
+            for (int y = 0; y < frame.rows; y++) {
+                memcpy(pDest + y * rowPitch, pSrc + y * srcStep, widthBytes);
+            }
+
+            g_pd3dDeviceContext->Unmap(g_pWebcamTexture, 0);
+        } else {
+            std::cerr << "Map failed: 0x" << std::hex << hr << std::endl;
+            continue;
+        }
+
+        ImGui::Begin("Webcam");
+        if (g_pWebcamSRV) {
+            ImGui::Image((ImTextureID)(intptr_t)g_pWebcamSRV, ImVec2((float)frame.cols, (float)frame.rows));
+        } else {
+            ImGui::Text("Webcam texture not ready!");
+        }
+        ImGui::End();
 
         ImGui::Render();
         g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
@@ -84,7 +187,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, (float*)&clear_color);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-        g_pSwapChain->Present(1, 0);
+        HRESULT presentResult = g_pSwapChain->Present(1, 0);
+        g_SwapChainOccluded = (presentResult == DXGI_STATUS_OCCLUDED);
+        if (presentResult == DXGI_ERROR_DEVICE_REMOVED || presentResult == DXGI_ERROR_DEVICE_RESET) {
+            std::cerr << "D3D device lost!\n";
+            break;
+        }
     }
 
     ImGui_ImplDX11_Shutdown();
@@ -100,13 +208,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 bool CreateDeviceD3D(HWND hWnd) {
     DXGI_SWAP_CHAIN_DESC sd = {};
-    sd.BufferCount = 2;
-    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.OutputWindow = hWnd;
-    sd.SampleDesc.Count = 1;
-    sd.Windowed = TRUE;
-    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    sd.BufferCount          = 2;
+    sd.BufferDesc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM;
+    sd.BufferUsage          = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sd.OutputWindow         = hWnd;
+    sd.SampleDesc.Count     = 1;
+    sd.Windowed             = TRUE;
+    sd.SwapEffect           = DXGI_SWAP_EFFECT_DISCARD;
 
     UINT createDeviceFlags = 0;
     D3D_FEATURE_LEVEL featureLevel;
@@ -123,9 +231,11 @@ bool CreateDeviceD3D(HWND hWnd) {
 
 void CleanupDeviceD3D() {
     CleanupRenderTarget();
-    if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
+    if (g_pWebcamSRV)     { g_pWebcamSRV->Release();     g_pWebcamSRV     = nullptr; }
+    if (g_pWebcamTexture) { g_pWebcamTexture->Release(); g_pWebcamTexture = nullptr; }
+    if (g_pSwapChain)     { g_pSwapChain->Release();     g_pSwapChain     = nullptr; }
     if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = nullptr; }
-    if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = nullptr; }
+    if (g_pd3dDevice)     { g_pd3dDevice->Release();     g_pd3dDevice     = nullptr; }
 }
 
 void CreateRenderTarget() {
@@ -148,7 +258,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED) return 0;
-        g_ResizeWidth = (UINT)LOWORD(lParam);
+        g_ResizeWidth  = (UINT)LOWORD(lParam);
         g_ResizeHeight = (UINT)HIWORD(lParam);
         return 0;
     case WM_SYSCOMMAND:
