@@ -12,6 +12,7 @@
 
 using namespace cv;
 
+
 VideoCapture open_webcam() {
     VideoCapture cap;
     int deviceID = 0;
@@ -25,6 +26,8 @@ VideoCapture open_webcam() {
     return cap;
 }
 
+int loadmodel = 1;
+static std::string g_modelLog;
 static ID3D11Device*            g_pd3dDevice            = nullptr;
 static ID3D11DeviceContext*     g_pd3dDeviceContext     = nullptr;
 static IDXGISwapChain*          g_pSwapChain            = nullptr;
@@ -33,7 +36,58 @@ static bool                     g_SwapChainOccluded     = false;
 static UINT                     g_ResizeWidth           = 0, g_ResizeHeight = 0;
 static ID3D11Texture2D*         g_pWebcamTexture        = nullptr;
 static ID3D11ShaderResourceView* g_pWebcamSRV           = nullptr;
+void settings_texture(Mat& frame_){
+    if (g_pWebcamTexture == nullptr) {
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width          = (UINT)frame_.cols;
+        desc.Height         = (UINT)frame_.rows;
+        desc.MipLevels      = 1;
+        desc.ArraySize      = 1;
+        desc.Format         = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage          = D3D11_USAGE_DYNAMIC;
+        desc.BindFlags      = D3D11_BIND_SHADER_RESOURCE;  
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
+        HRESULT hr = g_pd3dDevice->CreateTexture2D(&desc, nullptr, &g_pWebcamTexture);
+        if (FAILED(hr)) {
+            std::cerr << "CreateTexture2D failed: 0x" << std::hex << hr << std::endl;
+        }
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+        srvDesc.Format                    = desc.Format;
+        srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MipLevels       = 1;
+        srvDesc.Texture2D.MostDetailedMip = 0;
+
+        hr = g_pd3dDevice->CreateShaderResourceView(g_pWebcamTexture, &srvDesc, &g_pWebcamSRV);
+        if (FAILED(hr)) {
+            std::cerr << "CreateShaderResourceView failed: 0x" << std::hex << hr << std::endl;
+            g_pWebcamTexture->Release();
+            g_pWebcamTexture = nullptr;
+        }
+    }
+}
+
+void settings_mapped_subresource(Mat& rgba_ , Mat& frame_){
+    D3D11_MAPPED_SUBRESOURCE mappedResource;
+    HRESULT hr = g_pd3dDeviceContext->Map(g_pWebcamTexture, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+    if (SUCCEEDED(hr)) {
+        BYTE* pDest       = (BYTE*)mappedResource.pData;
+        const BYTE* pSrc  = rgba_.data;
+        int rowPitch      = mappedResource.RowPitch;
+        int srcStep       = (int)rgba_.step; 
+        int widthBytes    = frame_.cols * 4;
+
+        for (int y = 0; y < frame_.rows; y++) {
+            memcpy(pDest + y * rowPitch, pSrc + y * srcStep, widthBytes);
+        }
+
+        g_pd3dDeviceContext->Unmap(g_pWebcamTexture, 0);
+    } else {
+        std::cerr << "Map failed: 0x" << std::hex << hr << std::endl;
+    }
+}
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
 void CreateRenderTarget();
@@ -85,6 +139,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     for (int i = 0; i < 5; i++) cap >> frame;
 
+    
     while (!done) {
         MSG msg;
         while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE)) {
@@ -111,76 +166,56 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
+        /////////////////////////////////////////////////////////////////////////////////
+        /////////////////////////////////////////////////////////////////////////////////
+        /////////////////////////////////////////////////////////////////////////////////
+        /////////////////////////////////////////////////////////////////////////////////
+        if (ImGui::Button("Load Model") && loadmodel != 0){ 
+            const int64_t embedding_dim = 128;
+            const double dropout = 0.1;
+            model::FaceRecognitionModel model (3 , embedding_dim , dropout);
 
+            g_modelLog += "Loading model from: C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\Model.pt\n";
+            try {
+                torch::load(model, "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\Model.pt");
+                g_modelLog += "Model loaded successfully.\n";
+                loadmodel = 0;
+            } catch (const c10::Error& e) {
+                g_modelLog += "Error loading model.\n";
+            }
+        }
         cap >> frame;
         if (frame.empty()) {
             std::cerr << "ERROR! blank frame grabbed\n";
             break;
         }
 
-        if (g_pWebcamTexture == nullptr) {
-            D3D11_TEXTURE2D_DESC desc = {};
-            desc.Width          = (UINT)frame.cols;
-            desc.Height         = (UINT)frame.rows;
-            desc.MipLevels      = 1;
-            desc.ArraySize      = 1;
-            desc.Format         = DXGI_FORMAT_R8G8B8A8_UNORM;
-            desc.SampleDesc.Count = 1;
-            desc.Usage          = D3D11_USAGE_DYNAMIC;
-            desc.BindFlags      = D3D11_BIND_SHADER_RESOURCE;  
-            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-            HRESULT hr = g_pd3dDevice->CreateTexture2D(&desc, nullptr, &g_pWebcamTexture);
-            if (FAILED(hr)) {
-                std::cerr << "CreateTexture2D failed: 0x" << std::hex << hr << std::endl;
-                break;
-            }
-
-            D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-            srvDesc.Format                    = desc.Format;
-            srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
-            srvDesc.Texture2D.MipLevels       = 1;
-            srvDesc.Texture2D.MostDetailedMip = 0;
-
-            hr = g_pd3dDevice->CreateShaderResourceView(g_pWebcamTexture, &srvDesc, &g_pWebcamSRV);
-            if (FAILED(hr)) {
-                std::cerr << "CreateShaderResourceView failed: 0x" << std::hex << hr << std::endl;
-                g_pWebcamTexture->Release();
-                g_pWebcamTexture = nullptr;
-                break;
-            }
-        }
-
+        settings_texture(frame);
         cv::Mat rgba;
         cv::cvtColor(frame, rgba, cv::COLOR_BGR2RGBA);
-
-        D3D11_MAPPED_SUBRESOURCE mappedResource;
-        HRESULT hr = g_pd3dDeviceContext->Map(g_pWebcamTexture, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-        if (SUCCEEDED(hr)) {
-            BYTE* pDest       = (BYTE*)mappedResource.pData;
-            const BYTE* pSrc  = rgba.data;
-            int rowPitch      = mappedResource.RowPitch;
-            int srcStep       = (int)rgba.step;
-            int widthBytes    = frame.cols * 4;
-
-            for (int y = 0; y < frame.rows; y++) {
-                memcpy(pDest + y * rowPitch, pSrc + y * srcStep, widthBytes);
-            }
-
-            g_pd3dDeviceContext->Unmap(g_pWebcamTexture, 0);
-        } else {
-            std::cerr << "Map failed: 0x" << std::hex << hr << std::endl;
-            continue;
-        }
+        settings_mapped_subresource(rgba , frame);
 
         ImGui::Begin("Webcam");
         if (g_pWebcamSRV) {
-            ImGui::Image((ImTextureID)(intptr_t)g_pWebcamSRV, ImVec2((float)frame.cols, (float)frame.rows));
+            ImGui::Image((ImTextureID)(intptr_t)g_pWebcamSRV, ImVec2(640, 360));
         } else {
             ImGui::Text("Webcam texture not ready!");
         }
         ImGui::End();
 
+        ImGui::Begin("Model Log");
+        if (loadmodel != 0) {
+            ImGui::Text("Model is not loaded yet.");
+            ImGui::Text("Press the button above to start loading.");
+        } else {
+            ImGui::Text("Model is loaded.");
+        }
+        ImGui::Separator();
+        ImGui::TextWrapped("Logs:");
+        ImGui::BeginChild("ModelLogChild", ImVec2(0, 150), true, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::TextUnformatted(g_modelLog.c_str());
+        ImGui::EndChild();
+        ImGui::End();
         ImGui::Render();
         g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
         ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);

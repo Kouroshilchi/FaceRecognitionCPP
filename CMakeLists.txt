@@ -29,7 +29,7 @@ add_executable(FaceRecognitionCPP
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/main.cpp"
     ${PROJECT_SOURCE_FILES}
 )
-
+ 
 target_include_directories(FaceRecognitionCPP PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
     ${TORCH_INCLUDE_DIRS}
@@ -45,18 +45,20 @@ target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)
 
 add_executable(FaceRecognitionAPP WIN32 
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/main.cpp"
-    ${IMGUI_DIR}/imgui.cpp 
-    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui.cpp  
+    ${IMGUI_DIR}/imgui_draw.cpp   
     ${IMGUI_DIR}/imgui_widgets.cpp 
     ${IMGUI_DIR}/imgui_tables.cpp 
     ${IMGUI_DIR}/imgui_demo.cpp
     ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
     ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
-    ${PROJECTAPP_SOURCE_FILES} 
+    ${PROJECTAPP_SOURCE_FILES}   
+    ${PROJECT_SOURCE_FILES}
 )
 
 target_include_directories(FaceRecognitionAPP PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
     ${TORCH_INCLUDE_DIRS}       
     ${OpenCV_INCLUDE_DIRS}       
     ${IMGUI_DIR} 
