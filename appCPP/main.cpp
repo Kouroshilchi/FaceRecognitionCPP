@@ -5,15 +5,141 @@
 #include <torch/torch.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/videoio.hpp>
+#include <opencv2/objdetect.hpp>
 #include <opencv2/highgui.hpp>
 #include <iostream>
+#include <vector>
 #include <string>
+#include <fstream>
+#include <filesystem>
 #include "../Project/include/model/Model.h"
 
 using namespace cv;
 
+// ---------------------------------------------------------------------------
+// Centralized paths - change these in one place instead of hunting through code
+// ---------------------------------------------------------------------------
+namespace paths {
+    const std::string embeds_file = "embeddings.pt";
+    const std::string names_file  = "names.pt";
+    const std::string haarcascade = "C:\\libs\\opencv\\sources\\data\\haarcascades_cuda\\haarcascade_frontalface_alt.xml";
+    const std::string model_file  = "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\Model.pt";
+}
 
-VideoCapture open_webcam() {
+// ---------------------------------------------------------------------------
+// Faces: stores known face embeddings + names, supports search and registration
+// ---------------------------------------------------------------------------
+class Faces
+{
+private:
+    std::string embeds_path;
+    std::string names_path;
+    torch::Tensor Embeds;              // shape: [N, 128]
+    std::vector<std::string> names;    // names[i] corresponds to Embeds[i]
+
+public:
+    Faces(std::string embeds_file, std::string names_file)
+        : embeds_path(embeds_file), names_path(names_file)
+    {
+        load_embeds();
+        load_names();
+    }
+
+    // Loads embeddings from disk. If the file doesn't exist (first run),
+    // starts with an empty [0, 128] tensor instead of crashing.
+    void load_embeds()
+    {
+        if (std::filesystem::exists(embeds_path)) {
+            try {
+                torch::load(Embeds, embeds_path);
+            } catch (const c10::Error& e) {
+                std::cerr << "Failed to load embeddings (" << e.what()
+                          << "), starting fresh.\n";
+                Embeds = torch::zeros({0, 128}, torch::kFloat32);
+            }
+        } else {
+            Embeds = torch::zeros({0, 128}, torch::kFloat32);
+        }
+    }
+
+    void save_embeds()
+    {
+        torch::save(Embeds, embeds_path);
+    }
+
+    void load_names()
+    {
+        names.clear();
+        std::ifstream file(names_path);
+        if (!file.is_open()) return; // first run, no file yet
+        std::string line;
+        while (std::getline(file, line)) {
+            if (!line.empty()) names.push_back(line);
+        }
+    }
+
+    void save_names()
+    {
+        std::ofstream file(names_path, std::ios::trunc);
+        for (const auto& s : names) {
+            file << s << '\n';
+        }
+    }
+
+    // Adds a new face embedding + name. Expects new_emb to be a 1D [128]
+    // tensor (a single embedding) or a 2D [1, 128] tensor - both are
+    // normalized to [1, 128] before concatenation, matching the shape
+    // already used for every row in Embeds.
+    void add_Face(const torch::Tensor& new_emb, const std::string& name)
+    {
+        torch::Tensor emb_to_add = new_emb.detach().to(torch::kCPU).to(torch::kFloat32);
+
+        if (emb_to_add.dim() == 1) {
+            emb_to_add = emb_to_add.unsqueeze(0); // [128] -> [1, 128]
+        }
+        // emb_to_add is now guaranteed [1, 128], matching Embeds' row shape.
+
+        Embeds = torch::cat({Embeds, emb_to_add}, 0);
+        names.push_back(name);
+
+        save_embeds();
+        save_names();
+    }
+
+    // Returns the closest known name within threshold, or "UNKNOWN".
+    std::string search_faces(const torch::Tensor& searchembed, float threshold = 5.0f)
+    {
+        if (Embeds.size(0) == 0) return "UNKNOWN";
+
+        torch::Tensor query = searchembed.detach().to(torch::kCPU).to(torch::kFloat32);
+        if (query.dim() == 2) query = query.squeeze(0); // [1,128] -> [128]
+
+        float best_dist = std::numeric_limits<float>::max();
+        int best_idx = -1;
+
+        for (int i = 0; i < Embeds.size(0); i++) {
+            torch::Tensor dist = torch::norm(Embeds[i] - query, 2);
+            float d = dist.item<float>();
+            if (d < best_dist) {
+                best_dist = d;
+                best_idx = i;
+            }
+        }
+
+        if (best_idx >= 0 && best_dist < threshold) {
+            return names[best_idx];
+        }
+        return "UNKNOWN";
+    }
+
+    size_t face_count() const { return names.size(); }
+};
+
+// ---------------------------------------------------------------------------
+// Webcam
+// ---------------------------------------------------------------------------
+VideoCapture open_webcam()
+{
     VideoCapture cap;
     int deviceID = 0;
     int apiID = CAP_ANY;
@@ -26,7 +152,53 @@ VideoCapture open_webcam() {
     return cap;
 }
 
-int loadmodel = 1;
+// ---------------------------------------------------------------------------
+// Frame processing
+// One detected face's embedding (the largest/first detection) is exposed via
+// last_embedding / last_face_valid so the UI can offer "register this face".
+// ---------------------------------------------------------------------------
+static torch::Tensor g_lastEmbedding;
+static bool g_lastFaceValid = false;
+
+void process_frame(Mat& frame, CascadeClassifier& face_cascade,
+                    model::FaceRecognitionModel& model, Faces& face_processor)
+{
+    Mat gray;
+    cvtColor(frame, gray, COLOR_BGR2GRAY);
+    std::vector<Rect> faces;
+    face_cascade.detectMultiScale(gray, faces);
+
+    g_lastFaceValid = false;
+
+    torch::NoGradGuard no_grad; // inference only - don't build an autograd graph
+
+    for (const auto& face : faces) {
+        Mat faceROI = frame(face).clone();
+        cvtColor(faceROI, faceROI, COLOR_BGR2RGB);
+        resize(faceROI, faceROI, Size(112, 112));
+        faceROI.convertTo(faceROI, CV_32F, 1.0 / 255.0);
+
+        auto tensor = torch::from_blob(faceROI.data, {faceROI.rows, faceROI.cols, 3}, torch::kFloat32);
+        tensor = tensor.permute({2, 0, 1}).clone().unsqueeze(0).to(torch::kCUDA); // [1,3,112,112]
+
+        torch::Tensor embed_ = model->forward(tensor);
+        std::string name = face_processor.search_faces(embed_);
+
+        // Remember this embedding so the UI can register it on demand.
+        g_lastEmbedding = embed_.detach().to(torch::kCPU).clone();
+        g_lastFaceValid = true;
+
+        rectangle(frame, face, Scalar(255, 0, 0), 2);
+        int fontFace = FONT_HERSHEY_SIMPLEX;
+        Scalar color(0, 0, 255);
+        Point textOrg(face.x, face.y - 10);
+        putText(frame, name, textOrg, fontFace, 0.7, color, 2);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// D3D11 / window globals
+// ---------------------------------------------------------------------------
 static std::string g_modelLog;
 static ID3D11Device*            g_pd3dDevice            = nullptr;
 static ID3D11DeviceContext*     g_pd3dDeviceContext     = nullptr;
@@ -36,47 +208,67 @@ static bool                     g_SwapChainOccluded     = false;
 static UINT                     g_ResizeWidth           = 0, g_ResizeHeight = 0;
 static ID3D11Texture2D*         g_pWebcamTexture        = nullptr;
 static ID3D11ShaderResourceView* g_pWebcamSRV           = nullptr;
-void settings_texture(Mat& frame_){
-    if (g_pWebcamTexture == nullptr) {
-        D3D11_TEXTURE2D_DESC desc = {};
-        desc.Width          = (UINT)frame_.cols;
-        desc.Height         = (UINT)frame_.rows;
-        desc.MipLevels      = 1;
-        desc.ArraySize      = 1;
-        desc.Format         = DXGI_FORMAT_R8G8B8A8_UNORM;
-        desc.SampleDesc.Count = 1;
-        desc.Usage          = D3D11_USAGE_DYNAMIC;
-        desc.BindFlags      = D3D11_BIND_SHADER_RESOURCE;  
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+static int                       g_webcamTexW            = 0, g_webcamTexH = 0;
 
-        HRESULT hr = g_pd3dDevice->CreateTexture2D(&desc, nullptr, &g_pWebcamTexture);
-        if (FAILED(hr)) {
-            std::cerr << "CreateTexture2D failed: 0x" << std::hex << hr << std::endl;
-        }
+// (Re)creates the webcam texture if it doesn't exist yet or the frame size
+// has changed - prevents stale-size buffer overflows in the memcpy below.
+void settings_texture(Mat& frame_)
+{
+    bool needsRecreate = (g_pWebcamTexture == nullptr)
+        || (g_webcamTexW != frame_.cols)
+        || (g_webcamTexH != frame_.rows);
 
-        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-        srvDesc.Format                    = desc.Format;
-        srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Texture2D.MipLevels       = 1;
-        srvDesc.Texture2D.MostDetailedMip = 0;
+    if (!needsRecreate) return;
 
-        hr = g_pd3dDevice->CreateShaderResourceView(g_pWebcamTexture, &srvDesc, &g_pWebcamSRV);
-        if (FAILED(hr)) {
-            std::cerr << "CreateShaderResourceView failed: 0x" << std::hex << hr << std::endl;
-            g_pWebcamTexture->Release();
-            g_pWebcamTexture = nullptr;
-        }
+    if (g_pWebcamSRV)     { g_pWebcamSRV->Release();     g_pWebcamSRV     = nullptr; }
+    if (g_pWebcamTexture) { g_pWebcamTexture->Release(); g_pWebcamTexture = nullptr; }
+
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width          = (UINT)frame_.cols;
+    desc.Height         = (UINT)frame_.rows;
+    desc.MipLevels      = 1;
+    desc.ArraySize      = 1;
+    desc.Format         = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage          = D3D11_USAGE_DYNAMIC;
+    desc.BindFlags      = D3D11_BIND_SHADER_RESOURCE;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+    HRESULT hr = g_pd3dDevice->CreateTexture2D(&desc, nullptr, &g_pWebcamTexture);
+    if (FAILED(hr)) {
+        std::cerr << "CreateTexture2D failed: 0x" << std::hex << hr << std::endl;
+        return;
     }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format                    = desc.Format;
+    srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels       = 1;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+
+    hr = g_pd3dDevice->CreateShaderResourceView(g_pWebcamTexture, &srvDesc, &g_pWebcamSRV);
+    if (FAILED(hr)) {
+        std::cerr << "CreateShaderResourceView failed: 0x" << std::hex << hr << std::endl;
+        g_pWebcamTexture->Release();
+        g_pWebcamTexture = nullptr;
+        return;
+    }
+
+    g_webcamTexW = frame_.cols;
+    g_webcamTexH = frame_.rows;
 }
 
-void settings_mapped_subresource(Mat& rgba_ , Mat& frame_){
+void settings_mapped_subresource(Mat& rgba_, Mat& frame_)
+{
+    if (!g_pWebcamTexture) return;
+
     D3D11_MAPPED_SUBRESOURCE mappedResource;
     HRESULT hr = g_pd3dDeviceContext->Map(g_pWebcamTexture, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
     if (SUCCEEDED(hr)) {
         BYTE* pDest       = (BYTE*)mappedResource.pData;
         const BYTE* pSrc  = rgba_.data;
         int rowPitch      = mappedResource.RowPitch;
-        int srcStep       = (int)rgba_.step; 
+        int srcStep       = (int)rgba_.step;
         int widthBytes    = frame_.cols * 4;
 
         for (int y = 0; y < frame_.rows; y++) {
@@ -88,13 +280,15 @@ void settings_mapped_subresource(Mat& rgba_ , Mat& frame_){
         std::cerr << "Map failed: 0x" << std::hex << hr << std::endl;
     }
 }
+
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+{
     ImGui_ImplWin32_EnableDpiAwareness();
     float main_scale = 1.0f;
 
@@ -139,7 +333,33 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     for (int i = 0; i < 5; i++) cap >> frame;
 
-    
+    CascadeClassifier face_cascade;
+    if (!face_cascade.load(paths::haarcascade)) {
+        g_modelLog += "Failed to load haarcascade from: " + paths::haarcascade + "\n";
+    }
+
+    Faces face_processor(paths::embeds_file, paths::names_file);
+
+    const int64_t embedding_dim = 128;
+    const double dropout = 0.1;
+    model::FaceRecognitionModel model(3, embedding_dim, dropout);
+
+    g_modelLog += "Loading model from: " + paths::model_file + "\n";
+    bool model_loaded = false;
+    try {
+        torch::load(model, paths::model_file);
+        g_modelLog += "Model loaded successfully.\n";
+        model_loaded = true;
+    } catch (const c10::Error& e) {
+        g_modelLog += "Error loading model.\n";
+    }
+    model->to(torch::kCUDA);
+    model->eval();
+
+    // UI state for face registration
+    char nameInputBuf[128] = "";
+    std::string registerStatus;
+
     while (!done) {
         MSG msg;
         while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE)) {
@@ -166,34 +386,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        /////////////////////////////////////////////////////////////////////////////////
-        /////////////////////////////////////////////////////////////////////////////////
-        /////////////////////////////////////////////////////////////////////////////////
-        /////////////////////////////////////////////////////////////////////////////////
-        if (ImGui::Button("Load Model") && loadmodel != 0){ 
-            const int64_t embedding_dim = 128;
-            const double dropout = 0.1;
-            model::FaceRecognitionModel model (3 , embedding_dim , dropout);
 
-            g_modelLog += "Loading model from: C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\Model.pt\n";
-            try {
-                torch::load(model, "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\Model.pt");
-                g_modelLog += "Model loaded successfully.\n";
-                loadmodel = 0;
-            } catch (const c10::Error& e) {
-                g_modelLog += "Error loading model.\n";
-            }
-        }
         cap >> frame;
         if (frame.empty()) {
             std::cerr << "ERROR! blank frame grabbed\n";
             break;
         }
 
+        process_frame(frame, face_cascade, model, face_processor);
         settings_texture(frame);
         cv::Mat rgba;
         cv::cvtColor(frame, rgba, cv::COLOR_BGR2RGBA);
-        settings_mapped_subresource(rgba , frame);
+        settings_mapped_subresource(rgba, frame);
 
         ImGui::Begin("Webcam");
         if (g_pWebcamSRV) {
@@ -203,19 +407,36 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         }
         ImGui::End();
 
-        ImGui::Begin("Model Log");
-        if (loadmodel != 0) {
-            ImGui::Text("Model is not loaded yet.");
-            ImGui::Text("Press the button above to start loading.");
-        } else {
-            ImGui::Text("Model is loaded.");
+        ImGui::Begin("Face Registration");
+        ImGui::Text("Known faces: %zu", face_processor.face_count());
+        ImGui::InputText("Name", nameInputBuf, sizeof(nameInputBuf));
+
+        bool canRegister = g_lastFaceValid && nameInputBuf[0] != '\0';
+        if (!canRegister) ImGui::BeginDisabled();
+        if (ImGui::Button("Register Face")) {
+            face_processor.add_Face(g_lastEmbedding, nameInputBuf);
+            registerStatus = std::string("Registered '") + nameInputBuf + "'";
+            nameInputBuf[0] = '\0';
         }
+        if (!canRegister) ImGui::EndDisabled();
+
+        if (!g_lastFaceValid) {
+            ImGui::TextColored(ImVec4(1, 0.6f, 0.2f, 1), "No face currently detected.");
+        }
+        if (!registerStatus.empty()) {
+            ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "%s", registerStatus.c_str());
+        }
+        ImGui::End();
+
+        ImGui::Begin("Model Log");
+        ImGui::Text(model_loaded ? "Model is loaded." : "Model is NOT loaded.");
         ImGui::Separator();
         ImGui::TextWrapped("Logs:");
         ImGui::BeginChild("ModelLogChild", ImVec2(0, 150), true, ImGuiWindowFlags_HorizontalScrollbar);
         ImGui::TextUnformatted(g_modelLog.c_str());
         ImGui::EndChild();
         ImGui::End();
+
         ImGui::Render();
         g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
         ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -241,7 +462,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     return 0;
 }
 
-bool CreateDeviceD3D(HWND hWnd) {
+bool CreateDeviceD3D(HWND hWnd)
+{
     DXGI_SWAP_CHAIN_DESC sd = {};
     sd.BufferCount          = 2;
     sd.BufferDesc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -264,7 +486,8 @@ bool CreateDeviceD3D(HWND hWnd) {
     return true;
 }
 
-void CleanupDeviceD3D() {
+void CleanupDeviceD3D()
+{
     CleanupRenderTarget();
     if (g_pWebcamSRV)     { g_pWebcamSRV->Release();     g_pWebcamSRV     = nullptr; }
     if (g_pWebcamTexture) { g_pWebcamTexture->Release(); g_pWebcamTexture = nullptr; }
@@ -273,20 +496,23 @@ void CleanupDeviceD3D() {
     if (g_pd3dDevice)     { g_pd3dDevice->Release();     g_pd3dDevice     = nullptr; }
 }
 
-void CreateRenderTarget() {
+void CreateRenderTarget()
+{
     ID3D11Texture2D* pBackBuffer;
     g_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
     g_pd3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &g_mainRenderTargetView);
     pBackBuffer->Release();
 }
 
-void CleanupRenderTarget() {
+void CleanupRenderTarget()
+{
     if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = nullptr; }
 }
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
 
