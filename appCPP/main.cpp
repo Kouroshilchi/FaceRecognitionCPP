@@ -16,9 +16,6 @@
 
 using namespace cv;
 
-// ---------------------------------------------------------------------------
-// Centralized paths - change these in one place instead of hunting through code
-// ---------------------------------------------------------------------------
 namespace paths {
     const std::string embeds_file = "embeddings.pt";
     const std::string names_file  = "names.pt";
@@ -26,16 +23,13 @@ namespace paths {
     const std::string model_file  = "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\Model.pt";
 }
 
-// ---------------------------------------------------------------------------
-// Faces: stores known face embeddings + names, supports search and registration
-// ---------------------------------------------------------------------------
 class Faces
 {
 private:
     std::string embeds_path;
     std::string names_path;
-    torch::Tensor Embeds;              // shape: [N, 128]
-    std::vector<std::string> names;    // names[i] corresponds to Embeds[i]
+    torch::Tensor Embeds;
+    std::vector<std::string> names;
 
 public:
     Faces(std::string embeds_file, std::string names_file)
@@ -45,8 +39,6 @@ public:
         load_names();
     }
 
-    // Loads embeddings from disk. If the file doesn't exist (first run),
-    // starts with an empty [0, 128] tensor instead of crashing.
     void load_embeds()
     {
         if (std::filesystem::exists(embeds_path)) {
@@ -71,7 +63,7 @@ public:
     {
         names.clear();
         std::ifstream file(names_path);
-        if (!file.is_open()) return; // first run, no file yet
+        if (!file.is_open()) return;
         std::string line;
         while (std::getline(file, line)) {
             if (!line.empty()) names.push_back(line);
@@ -86,18 +78,13 @@ public:
         }
     }
 
-    // Adds a new face embedding + name. Expects new_emb to be a 1D [128]
-    // tensor (a single embedding) or a 2D [1, 128] tensor - both are
-    // normalized to [1, 128] before concatenation, matching the shape
-    // already used for every row in Embeds.
     void add_Face(const torch::Tensor& new_emb, const std::string& name)
     {
         torch::Tensor emb_to_add = new_emb.detach().to(torch::kCPU).to(torch::kFloat32);
 
         if (emb_to_add.dim() == 1) {
-            emb_to_add = emb_to_add.unsqueeze(0); // [128] -> [1, 128]
+            emb_to_add = emb_to_add.unsqueeze(0);
         }
-        // emb_to_add is now guaranteed [1, 128], matching Embeds' row shape.
 
         Embeds = torch::cat({Embeds, emb_to_add}, 0);
         names.push_back(name);
@@ -106,13 +93,12 @@ public:
         save_names();
     }
 
-    // Returns the closest known name within threshold, or "UNKNOWN".
-    std::string search_faces(const torch::Tensor& searchembed, float threshold = 5.0f)
+    std::string search_faces(const torch::Tensor& searchembed, float threshold = 1.0f)
     {
         if (Embeds.size(0) == 0) return "UNKNOWN";
 
         torch::Tensor query = searchembed.detach().to(torch::kCPU).to(torch::kFloat32);
-        if (query.dim() == 2) query = query.squeeze(0); // [1,128] -> [128]
+        if (query.dim() == 2) query = query.squeeze(0); 
 
         float best_dist = std::numeric_limits<float>::max();
         int best_idx = -1;
@@ -135,9 +121,7 @@ public:
     size_t face_count() const { return names.size(); }
 };
 
-// ---------------------------------------------------------------------------
-// Webcam
-// ---------------------------------------------------------------------------
+
 VideoCapture open_webcam()
 {
     VideoCapture cap;
@@ -151,12 +135,6 @@ VideoCapture open_webcam()
     }
     return cap;
 }
-
-// ---------------------------------------------------------------------------
-// Frame processing
-// One detected face's embedding (the largest/first detection) is exposed via
-// last_embedding / last_face_valid so the UI can offer "register this face".
-// ---------------------------------------------------------------------------
 static torch::Tensor g_lastEmbedding;
 static bool g_lastFaceValid = false;
 
@@ -170,7 +148,7 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
 
     g_lastFaceValid = false;
 
-    torch::NoGradGuard no_grad; // inference only - don't build an autograd graph
+    torch::NoGradGuard no_grad;
 
     for (const auto& face : faces) {
         Mat faceROI = frame(face).clone();
@@ -179,12 +157,12 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
         faceROI.convertTo(faceROI, CV_32F, 1.0 / 255.0);
 
         auto tensor = torch::from_blob(faceROI.data, {faceROI.rows, faceROI.cols, 3}, torch::kFloat32);
-        tensor = tensor.permute({2, 0, 1}).clone().unsqueeze(0).to(torch::kCUDA); // [1,3,112,112]
+        tensor = tensor.permute({2, 0, 1}).clone().unsqueeze(0).to(torch::kCUDA); 
 
         torch::Tensor embed_ = model->forward(tensor);
         std::string name = face_processor.search_faces(embed_);
 
-        // Remember this embedding so the UI can register it on demand.
+
         g_lastEmbedding = embed_.detach().to(torch::kCPU).clone();
         g_lastFaceValid = true;
 
@@ -196,9 +174,6 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
     }
 }
 
-// ---------------------------------------------------------------------------
-// D3D11 / window globals
-// ---------------------------------------------------------------------------
 static std::string g_modelLog;
 static ID3D11Device*            g_pd3dDevice            = nullptr;
 static ID3D11DeviceContext*     g_pd3dDeviceContext     = nullptr;
@@ -210,8 +185,6 @@ static ID3D11Texture2D*         g_pWebcamTexture        = nullptr;
 static ID3D11ShaderResourceView* g_pWebcamSRV           = nullptr;
 static int                       g_webcamTexW            = 0, g_webcamTexH = 0;
 
-// (Re)creates the webcam texture if it doesn't exist yet or the frame size
-// has changed - prevents stale-size buffer overflows in the memcpy below.
 void settings_texture(Mat& frame_)
 {
     bool needsRecreate = (g_pWebcamTexture == nullptr)
@@ -356,7 +329,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     model->to(torch::kCUDA);
     model->eval();
 
-    // UI state for face registration
     char nameInputBuf[128] = "";
     std::string registerStatus;
 
