@@ -56,7 +56,6 @@ int main(int argc, char* argv[]) {
         std::cout << "Total batches: " << total_batches << std::endl;
 
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
-        model->load_pretrained_weights("C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\resnet50_jit.pt");
         model->to(device);
 
         torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(1e-3));

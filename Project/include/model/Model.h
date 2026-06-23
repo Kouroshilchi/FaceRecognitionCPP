@@ -11,7 +11,7 @@ namespace model {
             int out_dim,
             double dropout
         );
-        void load_pretrained_weights(const std::string& weights_path);
+
         torch::Tensor forward(torch::Tensor x);
         FaceRecognitionBackBone backbone{nullptr};
         FaceRecognitionProjector projector{nullptr};

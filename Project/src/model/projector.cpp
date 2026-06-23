@@ -1,6 +1,4 @@
 #include "../include/model/projector.h"
-#include <iostream>
-#include <fstream>
 
 namespace model {
     FaceRecognitionProjectorImpl::FaceRecognitionProjectorImpl(
@@ -9,9 +7,9 @@ namespace model {
         double dropout
     )
     {
-        conv1 = register_module("conv1", torch::nn::Conv2d(torch::nn::Conv2dOptions(in_channel, 64, 7).stride(2).padding(3)));
-        bn1 = register_module("bn1", torch::nn::BatchNorm2d(64));
-        relu = register_module("relu", torch::nn::ReLU());
+        conv1 = register_module("conv1", torch::nn::Conv2d(torch::nn::Conv2dOptions(in_channel, 64, 7).stride(2).padding(3).bias(false)));
+        bn1   = register_module("bn1",   torch::nn::BatchNorm2d(64));
+        relu  = register_module("relu",  torch::nn::ReLU());
         maxpool = register_module("maxpool", torch::nn::MaxPool2d(torch::nn::MaxPool2dOptions(3).stride(2).padding(1)));
 
         int64_t inplanes = 64;
@@ -27,105 +25,121 @@ namespace model {
             return seq;
         };
 
-        layer1 = register_module("layer1", make_layer(64, 3, 1));
+        layer1 = register_module("layer1", make_layer(64,  3, 1));
         layer2 = register_module("layer2", make_layer(128, 4, 2));
         layer3 = register_module("layer3", make_layer(256, 6, 2));
         layer4 = register_module("layer4", make_layer(512, 3, 2));
 
         avgpool = register_module("avgpool", torch::nn::AdaptiveAvgPool2d(torch::nn::AdaptiveAvgPool2dOptions({1, 1})));
 
-        fc1 = register_module("fc1", torch::nn::Linear(512 * model::BottleneckImpl::expansion, 256));
+        fc1    = register_module("fc1",    torch::nn::Linear(512 * model::BottleneckImpl::expansion, 256));
         bn_fc1 = register_module("bn_fc1", torch::nn::BatchNorm1d(256));
-        fc2 = register_module("fc2", torch::nn::Linear(256, 512));
+        fc2    = register_module("fc2",    torch::nn::Linear(256, 512));
         bn_fc2 = register_module("bn_fc2", torch::nn::BatchNorm1d(512));
-        fc3 = register_module("fc3", torch::nn::Linear(512, out_dim));
+        fc3    = register_module("fc3",    torch::nn::Linear(512, out_dim));
         bn_fc3 = register_module("bn_fc3", torch::nn::BatchNorm1d(out_dim));
         dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
+
+        load_pretrained_weights("C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\resnet50_weights.pt");
     }
 
-    void FaceRecognitionProjectorImpl::load_pretrained_weights(const std::string& weights_path) {
-        try {
-            std::cout << "Loading pretrained weights from: " << weights_path << std::endl;
-            
-            auto resnet50 = torch::jit::load(weights_path);
-            resnet50.eval();
-            
-            auto state_dict = resnet50.state_dict();
-            
-            for (const auto& pair : state_dict) {
-                std::string key = pair.key();
-                torch::Tensor value = pair.value();
-                
-                if (key.find("conv1.") != std::string::npos) {
-                    if (key.find(".weight") != std::string::npos && conv1) {
-                        conv1->weight.data().copy_(value);
-                    } else if (key.find(".bias") != std::string::npos && conv1) {
-                        conv1->bias.data().copy_(value);
-                    }
+    void FaceRecognitionProjectorImpl::load_pretrained_weights(const std::string& weight_path) {
+        torch::serialize::InputArchive archive;
+        archive.load_from(weight_path);
+
+        auto load_conv = [&](torch::nn::Conv2d& conv, const std::string& prefix) {
+            torch::Tensor w;
+            archive.read(prefix + ".weight", w);
+            conv->weight = w;
+        };
+
+        auto load_bn = [&](torch::nn::BatchNorm2d& bn, const std::string& prefix) {
+            torch::Tensor w, b, rm, rv;
+            archive.read(prefix + ".weight",       w);
+            archive.read(prefix + ".bias",         b);
+            archive.read(prefix + ".running_mean", rm);
+            archive.read(prefix + ".running_var",  rv);
+            bn->weight       = w;
+            bn->bias         = b;
+            bn->running_mean = rm;
+            bn->running_var  = rv;
+        };
+
+        load_conv(conv1, "conv1");
+        load_bn(bn1, "bn1");
+
+        auto load_bottleneck = [&](torch::nn::Sequential& layer, const std::string& layer_name) {
+            int block_idx = 0;
+            for (auto& module : layer->modules(false)) {
+                auto* block = module->as<BottleneckImpl>();
+                if (!block) continue;
+
+                std::string prefix = layer_name + "." + std::to_string(block_idx);
+
+                load_conv(block->conv1, prefix + ".conv1");
+                load_bn  (block->bn1,   prefix + ".bn1");
+                load_conv(block->conv2, prefix + ".conv2");
+                load_bn  (block->bn2,   prefix + ".bn2");
+                load_conv(block->conv3, prefix + ".conv3");
+                load_bn  (block->bn3,   prefix + ".bn3");
+
+                if (!block->downsample_layer.is_empty()) {
+                    torch::Tensor dw;
+                    archive.read(prefix + ".downsample.0.weight", dw);
+                    block->downsample_layer[0]->as<torch::nn::Conv2dImpl>()->weight = dw;
+
+                    torch::Tensor dbw, dbb, drm, drv;
+                    archive.read(prefix + ".downsample.1.weight",       dbw);
+                    archive.read(prefix + ".downsample.1.bias",         dbb);
+                    archive.read(prefix + ".downsample.1.running_mean", drm);
+                    archive.read(prefix + ".downsample.1.running_var",  drv);
+                    auto* dsbn = block->downsample_layer[1]->as<torch::nn::BatchNorm2dImpl>();
+                    dsbn->weight       = dbw;
+                    dsbn->bias         = dbb;
+                    dsbn->running_mean = drm;
+                    dsbn->running_var  = drv;
                 }
-                else if (key.find("bn1.") != std::string::npos && bn1) {
-                    if (key.find(".weight") != std::string::npos) {
-                        bn1->weight.data().copy_(value);
-                    } else if (key.find(".bias") != std::string::npos) {
-                        bn1->bias.data().copy_(value);
-                    } else if (key.find(".running_mean") != std::string::npos) {
-                        bn1->running_mean.data().copy_(value);
-                    } else if (key.find(".running_var") != std::string::npos) {
-                        bn1->running_var.data().copy_(value);
-                    }
-                }
-                else if (key.find("layer1.") != std::string::npos) {
-                    load_layer_weights(layer1, key, value);
-                }
-                else if (key.find("layer2.") != std::string::npos) {
-                    load_layer_weights(layer2, key, value);
-                }
-                else if (key.find("layer3.") != std::string::npos) {
-                    load_layer_weights(layer3, key, value);
-                }
-                else if (key.find("layer4.") != std::string::npos) {
-                    load_layer_weights(layer4, key, value);
-                }
+
+                ++block_idx;
             }
-            
-            std::cout << "Pretrained weights loaded successfully!" << std::endl;
-        } catch (const std::exception& e) {
-            std::cerr << "Error loading pretrained weights: " << e.what() << std::endl;
-            throw;
-        }
+        };
+
+        load_bottleneck(layer1, "layer1");
+        load_bottleneck(layer2, "layer2");
+        load_bottleneck(layer3, "layer3");
+        load_bottleneck(layer4, "layer4");
+
+        std::cout << "ResNet-50 pretrained weights loaded successfully." << std::endl;
     }
 
-    void load_layer_weights(torch::nn::Sequential& layer, const std::string& key, const torch::Tensor& value) {
-        auto children = layer->children();
-    }
+} // namespace model
 
-    torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
-        x = conv1->forward(x);
-        x = bn1->forward(x);
-        x = relu->forward(x);
-        x = maxpool->forward(x);
+torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
+    x = conv1->forward(x);
+    x = bn1->forward(x);
+    x = relu->forward(x);
+    x = maxpool->forward(x);
 
-        x = layer1->forward(x);
-        x = layer2->forward(x);
-        x = layer3->forward(x);
-        x = layer4->forward(x);
+    x = layer1->forward(x);
+    x = layer2->forward(x);
+    x = layer3->forward(x);
+    x = layer4->forward(x);
 
-        x = avgpool->forward(x);
-        x = x.view({x.size(0), -1});
+    x = avgpool->forward(x);
+    x = x.view({x.size(0), -1});
 
-        x = fc1->forward(x);
-        x = bn_fc1->forward(x);
-        x = relu->forward(x);
-        x = dropout_layer->forward(x);
+    x = fc1->forward(x);
+    x = bn_fc1->forward(x);
+    x = relu->forward(x);
+    x = dropout_layer->forward(x);
 
-        x = fc2->forward(x);
-        x = bn_fc2->forward(x);
-        x = relu->forward(x);
-        x = dropout_layer->forward(x);
+    x = fc2->forward(x);
+    x = bn_fc2->forward(x);
+    x = relu->forward(x);
+    x = dropout_layer->forward(x);
 
-        x = fc3->forward(x);
-        x = bn_fc3->forward(x);
+    x = fc3->forward(x);
+    x = bn_fc3->forward(x);
 
-        return x;
-    }
+    return x;
 }
