@@ -38,7 +38,7 @@ target_include_directories(FaceRecognitionCPP PRIVATE
 
 target_link_libraries(FaceRecognitionCPP PRIVATE
     ${TORCH_LIBRARIES}
-    ${OpenCV_LIBS}
+    ${OpenCV_LIBS} 
 )
 
 target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)

@@ -1,4 +1,5 @@
-#include "include/model/TripletLoss.h"
+#include "../include/model/TripletLoss.h"
+#include <iostream>
 
 torch::Tensor loss::TripletLossImpl::forward(const torch::Tensor& embeddings, const torch::Tensor& labels) {
     // embeddings: [N, D], labels: [N]
@@ -13,7 +14,7 @@ torch::Tensor loss::TripletLossImpl::forward(const torch::Tensor& embeddings, co
     auto dist = sq.unsqueeze(1) + sq.unsqueeze(0) - 2.0 * embeddings.matmul(embeddings.t());
     dist = torch::clamp_min(dist, 0.0);
     dist = torch::sqrt(dist + 1e-12);
-    
+
     auto labels1 = labels.view({-1, 1});
     auto eq = labels1.eq(labels1.t());
     auto neq = labels1.ne(labels1.t());
@@ -39,7 +40,7 @@ torch::Tensor loss::TripletLossImpl::forward(const torch::Tensor& embeddings, co
     auto has_neg = neq.any(1);
     auto valid = has_pos.logical_and(has_neg);
     if (valid.sum().item<int64_t>() == 0) {
-        return torch::zeros({}, embeddings.options());
+        return torch::zeros({}, embeddings.options()).requires_grad_(true);
     }
 
     auto losses_valid = losses.masked_select(valid);
