@@ -11,6 +11,9 @@ namespace model {
         );
 
         torch::Tensor forward(torch::Tensor x);
+        
+        void load_pretrained_weights(const std::string& weights_path);
+        void load_layer_weights(torch::nn::Sequential& layer, const torch::OrderedDict<std::string, torch::Tensor>& state_dict, const std::string& prefix);        void load_pretrained_weights(const std::string& weights_path);
 
         torch::nn::Conv2d conv1{nullptr};
         torch::nn::BatchNorm2d bn1{nullptr};

@@ -1,4 +1,6 @@
 #include "../include/model/projector.h"
+#include <iostream>
+#include <fstream>
 
 namespace model {
     FaceRecognitionProjectorImpl::FaceRecognitionProjectorImpl(
@@ -7,7 +9,6 @@ namespace model {
         double dropout
     )
     {
-        // Initial ResNet-50 stem
         conv1 = register_module("conv1", torch::nn::Conv2d(torch::nn::Conv2dOptions(in_channel, 64, 7).stride(2).padding(3)));
         bn1 = register_module("bn1", torch::nn::BatchNorm2d(64));
         relu = register_module("relu", torch::nn::ReLU());
@@ -41,34 +42,90 @@ namespace model {
         bn_fc3 = register_module("bn_fc3", torch::nn::BatchNorm1d(out_dim));
         dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
     }
-}
 
-torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
-    x = conv1->forward(x);
-    x = bn1->forward(x);
-    x = relu->forward(x);
-    x = maxpool->forward(x);
+    void FaceRecognitionProjectorImpl::load_pretrained_weights(const std::string& weights_path) {
+        try {
+            std::cout << "Loading pretrained weights from: " << weights_path << std::endl;
+            
+            auto resnet50 = torch::jit::load(weights_path);
+            resnet50.eval();
+            
+            auto state_dict = resnet50.state_dict();
+            
+            for (const auto& pair : state_dict) {
+                std::string key = pair.key();
+                torch::Tensor value = pair.value();
+                
+                if (key.find("conv1.") != std::string::npos) {
+                    if (key.find(".weight") != std::string::npos && conv1) {
+                        conv1->weight.data().copy_(value);
+                    } else if (key.find(".bias") != std::string::npos && conv1) {
+                        conv1->bias.data().copy_(value);
+                    }
+                }
+                else if (key.find("bn1.") != std::string::npos && bn1) {
+                    if (key.find(".weight") != std::string::npos) {
+                        bn1->weight.data().copy_(value);
+                    } else if (key.find(".bias") != std::string::npos) {
+                        bn1->bias.data().copy_(value);
+                    } else if (key.find(".running_mean") != std::string::npos) {
+                        bn1->running_mean.data().copy_(value);
+                    } else if (key.find(".running_var") != std::string::npos) {
+                        bn1->running_var.data().copy_(value);
+                    }
+                }
+                else if (key.find("layer1.") != std::string::npos) {
+                    load_layer_weights(layer1, key, value);
+                }
+                else if (key.find("layer2.") != std::string::npos) {
+                    load_layer_weights(layer2, key, value);
+                }
+                else if (key.find("layer3.") != std::string::npos) {
+                    load_layer_weights(layer3, key, value);
+                }
+                else if (key.find("layer4.") != std::string::npos) {
+                    load_layer_weights(layer4, key, value);
+                }
+            }
+            
+            std::cout << "Pretrained weights loaded successfully!" << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "Error loading pretrained weights: " << e.what() << std::endl;
+            throw;
+        }
+    }
 
-    x = layer1->forward(x);
-    x = layer2->forward(x);
-    x = layer3->forward(x);
-    x = layer4->forward(x);
+    void load_layer_weights(torch::nn::Sequential& layer, const std::string& key, const torch::Tensor& value) {
+        auto children = layer->children();
+    }
 
-    x = avgpool->forward(x);
-    x = x.view({x.size(0), -1});
+    torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
+        x = conv1->forward(x);
+        x = bn1->forward(x);
+        x = relu->forward(x);
+        x = maxpool->forward(x);
 
-    x = fc1->forward(x);
-    x = bn_fc1->forward(x);
-    x = relu->forward(x);
-    x = dropout_layer->forward(x);
+        x = layer1->forward(x);
+        x = layer2->forward(x);
+        x = layer3->forward(x);
+        x = layer4->forward(x);
 
-    x = fc2->forward(x);
-    x = bn_fc2->forward(x);
-    x = relu->forward(x);
-    x = dropout_layer->forward(x);
+        x = avgpool->forward(x);
+        x = x.view({x.size(0), -1});
 
-    x = fc3->forward(x);
-    x = bn_fc3->forward(x);
+        x = fc1->forward(x);
+        x = bn_fc1->forward(x);
+        x = relu->forward(x);
+        x = dropout_layer->forward(x);
 
-    return x;
+        x = fc2->forward(x);
+        x = bn_fc2->forward(x);
+        x = relu->forward(x);
+        x = dropout_layer->forward(x);
+
+        x = fc3->forward(x);
+        x = bn_fc3->forward(x);
+
+        return x;
+    }
 }

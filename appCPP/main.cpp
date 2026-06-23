@@ -20,7 +20,7 @@ namespace paths {
     const std::string embeds_file = "embeddings.pt";
     const std::string names_file  = "names.pt";
     const std::string haarcascade = "C:\\libs\\opencv\\sources\\data\\haarcascades_cuda\\haarcascade_frontalface_alt.xml";
-    const std::string model_file  = "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\Model.pt";
+    const std::string model_file  = "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model.pt";
 }
 
 class Faces
@@ -111,8 +111,8 @@ public:
                 best_idx = i;
             }
         }
-        confidence = (best_dist*1000000);
-        if (best_idx >= 0 && (best_dist*1000000) < threshold) {
+        confidence = best_dist;
+        if (best_idx >= 0 && best_dist < threshold) {
             return names[best_idx];
         }
         return "UNKNOWN";
@@ -161,7 +161,7 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
 
         torch::Tensor embed_ = model->forward(tensor);
         float confidence = 0.0;
-        std::string name = face_processor.search_faces(embed_ ,40.0 , confidence);
+        std::string name = face_processor.search_faces(embed_ ,0.85 , confidence);
 
 
         g_lastEmbedding = embed_.detach().to(torch::kCPU).clone();
