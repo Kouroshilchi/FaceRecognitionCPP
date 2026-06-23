@@ -1,5 +1,6 @@
 #pragma once
 #include <torch/torch.h>
+#include <torch/script.h>
 #include "Bottleneck.h"
 
 namespace model {
@@ -11,7 +12,6 @@ namespace model {
         );
 
         torch::Tensor forward(torch::Tensor x);
-
         void load_pretrained_weights(const std::string& weight_path);
 
         torch::nn::Conv2d conv1{nullptr};
@@ -32,7 +32,6 @@ namespace model {
         torch::nn::Linear fc3{nullptr};
         torch::nn::BatchNorm1d bn_fc3{nullptr};
         torch::nn::Dropout dropout_layer{nullptr};
-        
     };
     TORCH_MODULE(FaceRecognitionProjector);
 }

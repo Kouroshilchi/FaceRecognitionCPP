@@ -1,6 +1,6 @@
 #pragma once
 #include <torch/torch.h>
-#include "backbone.h"
+// #include "backbone.h"
 #include "projector.h"
 
 
@@ -13,7 +13,7 @@ namespace model {
         );
 
         torch::Tensor forward(torch::Tensor x);
-        FaceRecognitionBackBone backbone{nullptr};
+        // FaceRecognitionBackBone backbone{nullptr};
         FaceRecognitionProjector projector{nullptr};
     };
     TORCH_MODULE(FaceRecognitionModel);
