@@ -93,7 +93,7 @@ public:
         save_names();
     }
 
-    std::string search_faces(const torch::Tensor& searchembed, float threshold = 1.0f)
+    std::string search_faces(const torch::Tensor& searchembed, float threshold , float& confidence)
     {
         if (Embeds.size(0) == 0) return "UNKNOWN";
 
@@ -111,7 +111,7 @@ public:
                 best_idx = i;
             }
         }
-
+        confidence = best_dist;
         if (best_idx >= 0 && best_dist < threshold) {
             return names[best_idx];
         }
@@ -160,17 +160,21 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
         tensor = tensor.permute({2, 0, 1}).clone().unsqueeze(0).to(torch::kCUDA); 
 
         torch::Tensor embed_ = model->forward(tensor);
-        std::string name = face_processor.search_faces(embed_);
+        float confidence = 0.0;
+        std::string name = face_processor.search_faces(embed_ ,1.0 , confidence);
 
 
         g_lastEmbedding = embed_.detach().to(torch::kCPU).clone();
         g_lastFaceValid = true;
 
-        rectangle(frame, face, Scalar(255, 0, 0), 2);
+        rectangle(frame, face, Scalar(0, 0, 255), 3);
         int fontFace = FONT_HERSHEY_SIMPLEX;
         Scalar color(0, 0, 255);
         Point textOrg(face.x, face.y - 10);
         putText(frame, name, textOrg, fontFace, 0.7, color, 2);
+        Scalar color_(0, 0, 255);
+        Point textOrg_(face.x, face.y -25);
+        putText(frame, std::to_string(confidence), textOrg_, fontFace, 0.7, color_, 2);
     }
 }
 
@@ -373,7 +377,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
         ImGui::Begin("Webcam");
         if (g_pWebcamSRV) {
-            ImGui::Image((ImTextureID)(intptr_t)g_pWebcamSRV, ImVec2(640, 360));
+            ImGui::Image((ImTextureID)(intptr_t)g_pWebcamSRV, ImVec2(1000, 500));
         } else {
             ImGui::Text("Webcam texture not ready!");
         }
