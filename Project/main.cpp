@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
         const int64_t batch_size   = 16;      
         const int64_t embedding_dim = 128;
         const double  dropout       = 0.1;
-        const int64_t epochs        = 5;
+        const int64_t epochs        = 10;
         const cv::Size image_size{112, 112};
 
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
         torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(1e-3));
         auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
-        const double margin = 0.3;
+        const double margin = 0.5;
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             model->train();
