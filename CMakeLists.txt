@@ -43,6 +43,24 @@ target_link_libraries(FaceRecognitionCPP PRIVATE
 
 target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)
 
+add_executable(ExportModel
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/export_model.cpp"
+    ${PROJECT_SOURCE_FILES}
+)
+
+target_include_directories(ExportModel PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
+    ${TORCH_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
+)
+ 
+target_link_libraries(ExportModel PRIVATE
+    ${TORCH_LIBRARIES}
+    ${OpenCV_LIBS}
+)
+
+target_compile_features(ExportModel PRIVATE cxx_std_17)
+
 add_executable(FaceRecognitionAPP WIN32 
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/main.cpp"
     ${IMGUI_DIR}/imgui.cpp  
@@ -77,7 +95,7 @@ target_link_libraries(FaceRecognitionAPP PRIVATE
 target_compile_features(FaceRecognitionAPP PRIVATE cxx_std_17)
 
 if(MSVC)
-    foreach(target FaceRecognitionCPP FaceRecognitionAPP)
+    foreach(target FaceRecognitionCPP FaceRecognitionAPP ExportModel)
         target_link_directories(${target} PRIVATE
             "${OpenCV_DIR}/x64/vc16/bin"
             "${TORCH_INSTALL_PREFIX}/lib"

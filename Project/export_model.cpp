@@ -12,7 +12,7 @@ int main() {
         std::cout << "Loading model..." << std::endl;
         
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout); 
-        torch::load(model, "model.pt");
+        torch::load(model, "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model.pt");
         
         
         
@@ -34,7 +34,7 @@ int main() {
 
         auto bytes = torch::pickle_save(dict);
 
-        std::ofstream fout("model_weights.pt", std::ios::out | std::ios::binary);
+        std::ofstream fout("C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model_weights.pt", std::ios::out | std::ios::binary);
         fout.write(bytes.data(), bytes.size());
         fout.close();
         std::cout << "State dict saved to model_state.pt" << std::endl;
