@@ -4,8 +4,8 @@
 #include <string>
 #include <torch/optim/schedulers/step_lr.h>
 #include "include/model/Model.h"
-#include "include/model/ArcFace.h"
 #include "include/dataset/Dataset.h"
+#include "include/model/TripletLoss.h"
 
 
 
@@ -41,10 +41,8 @@ int main(int argc, char* argv[]) {
         std::cout << "Total batches: " << total_batches << std::endl;
 
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
-        auto arcface = model::ArcFace(embedding_dim, num_classes, 42.0, 0.5, false);
 
         model->to(device);
-        arcface->to(device);
 
         std::vector<torch::Tensor> parameters;
         for (auto& p : model->parameters()) {
@@ -52,19 +50,14 @@ int main(int argc, char* argv[]) {
                 parameters.push_back(p);
             }
         }
-        for (auto& p : arcface->parameters()) {
-            if (p.requires_grad()) {
-                parameters.push_back(p);
-            }
-        }
 
         torch::optim::Adam optimizer(parameters, torch::optim::AdamOptions(1e-3));
         auto scheduler = torch::optim::StepLR(optimizer, /*step_size=*/5, /*gamma=*/0.5);
-        torch::nn::CrossEntropyLoss criterion;
+        // Triplet loss (batch-hard mining)
+        loss::TripletLossImpl triplet_loss(0.3);
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             model->train();
-            arcface->train();
             double epoch_loss = 0.0;
             int64_t batch_index = 0;
 
@@ -74,8 +67,8 @@ int main(int argc, char* argv[]) {
 
                 optimizer.zero_grad();
                 auto embeddings = model->forward(images);
-                auto logits = arcface->forward(embeddings, labels);
-                auto loss = criterion(logits, labels);
+                auto tloss = triplet_loss.forward(embeddings, labels);
+                auto loss = tloss;
                 loss.backward();
                 optimizer.step();
 
