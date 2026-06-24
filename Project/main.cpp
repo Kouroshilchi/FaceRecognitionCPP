@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 loss.backward();
-                torch::nn::utils::clip_grad_norm_(model->parameters(), 1.0);
+                // torch::nn::utils::clip_grad_norm_(model->parameters(), 1.0);
                 optimizer.step();
 
                 epoch_loss += loss.item<double>();
