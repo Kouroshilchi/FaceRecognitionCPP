@@ -6,6 +6,7 @@
 #include "include/model/Model.h"
 #include "include/dataset/TripletDataset.h"
 #include "include/model/TripletLoss.h"
+#include "include/model/HardMining.h"
 
 // struct TripletCollate {
 //     dataset::TripletBatch operator()(std::vector<dataset::TripletSample> samples) {
@@ -95,10 +96,29 @@ int main(int argc, char* argv[]) {
                     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
                 emb_n = torch::nn::functional::normalize(emb_n,
                     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
-
+                
                 auto dist_ap = (emb_a - emb_p).pow(2).sum(1);
-                auto dist_an = (emb_a - emb_n).pow(2).sum(1);
-                auto loss = torch::relu(dist_ap - dist_an + margin).mean();
+                auto dist_an = (emb_a - emb_n).pow(2).sum(1);      
+                auto all_embeddings = torch::cat({emb_a, emb_p, emb_n}, 0);
+                auto all_labels = torch::cat({labels, labels, labels}, 0);
+                // auto dist_ap = (emb_a - emb_p).pow(2).sum(1);
+                // auto dist_an = (emb_a - emb_n).pow(2).sum(1);
+                // auto loss = torch::relu(dist_ap - dist_an + margin).mean();
+
+                auto hard_triplets = HardMining::select_hard_triplets(
+                    all_embeddings, 
+                    all_labels
+                );
+
+                torch::Tensor loss = torch::zeros({1}, device);
+                for (auto [a, p, n] : hard_triplets) {
+                    auto triplet_loss = torch::relu(
+                        (emb_a[a] - emb_p[p]).pow(2).sum() - 
+                        (emb_a[a] - emb_n[n]).pow(2).sum() + 0.2
+                    );
+                    loss += triplet_loss;
+                }
+                loss = loss / hard_triplets.size();
 
                 if (loss.item<double>() == 0.0 && batch_index > 0) {
                     zero_loss_counter++;
