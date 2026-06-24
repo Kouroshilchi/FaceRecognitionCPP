@@ -1,5 +1,5 @@
 #include "../include/model/HardMining.h"
-#include <iostream>
+#include <algorithm>
 
 torch::Tensor HardMining::pairwise_distances(torch::Tensor embeddings) {
     auto dot_product = torch::mm(embeddings, embeddings.transpose(0, 1));
@@ -18,17 +18,15 @@ torch::Tensor HardMining::batch_hard_triplet_loss(
     auto device = embeddings.device();
     auto dist_mat = pairwise_distances(embeddings);
     
-
     auto mask_same_class = labels.unsqueeze(1) == labels.unsqueeze(0);
-    auto inf_mask = torch::full_like(mask_same_class, -1e9, torch::kFloat32);
-    auto mask_with_inf = torch::where(mask_same_class, dist_mat, inf_mask);
-    auto hardest_positive_dist = mask_with_inf.max(1).values;
     
-
-    auto mask_diff_class = !mask_same_class;
-    auto inf_mask_neg = torch::full_like(mask_diff_class, 1e9, torch::kFloat32);
-    auto mask_with_inf_neg = torch::where(mask_diff_class, dist_mat, inf_mask_neg);
-    auto hardest_negative_dist = mask_with_inf_neg.min(1).values;
+    auto same_class_dists = dist_mat.clone();
+    same_class_dists.masked_fill_(~mask_same_class, -1e9);
+    auto hardest_positive_dist = std::get<0>(same_class_dists.max(1));
+    
+    auto diff_class_dists = dist_mat.clone();
+    diff_class_dists.masked_fill_(mask_same_class, 1e9);
+    auto hardest_negative_dist = std::get<0>(diff_class_dists.min(1));
     
     auto loss = torch::relu(hardest_positive_dist - hardest_negative_dist + margin);
     return loss.mean();
@@ -59,7 +57,7 @@ std::vector<std::tuple<int, int, int>> HardMining::select_hard_triplets(
         }
         
         std::sort(positive_dists.begin(), positive_dists.end(), 
-            [](auto& a, auto& b) { return a.first > b.first; });  
+            [](auto& a, auto& b) { return a.first > b.first; });
         
         std::sort(negative_dists.begin(), negative_dists.end(),
             [](auto& a, auto& b) { return a.first < b.first; });
