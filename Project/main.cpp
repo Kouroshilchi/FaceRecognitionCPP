@@ -110,15 +110,20 @@ int main(int argc, char* argv[]) {
                     all_labels
                 );
 
-                torch::Tensor loss = torch::zeros({1}, device);
-                for (auto [a, p, n] : hard_triplets) {
-                    auto triplet_loss = torch::relu(
-                        (emb_a[a] - emb_p[p]).pow(2).sum() - 
-                        (emb_a[a] - emb_n[n]).pow(2).sum() + 0.2
-                    );
-                    loss += triplet_loss;
+                torch::Tensor loss = torch::zeros({}, device);
+                if (!hard_triplets.empty()) {
+                    for (auto [a, p, n] : hard_triplets) {
+                        auto anchor_emb   = all_embeddings[a];
+                        auto positive_emb = all_embeddings[p];
+                        auto negative_emb = all_embeddings[n];
+                        auto triplet_loss = torch::relu(
+                            (anchor_emb - positive_emb).pow(2).sum() - 
+                            (anchor_emb - negative_emb).pow(2).sum() + 0.2
+                        );
+                        loss += triplet_loss;
+                    }
+                    loss = loss / static_cast<double>(hard_triplets.size());
                 }
-                loss = loss / hard_triplets.size();
 
                 if (loss.item<double>() == 0.0 && batch_index > 0) {
                     zero_loss_counter++;
