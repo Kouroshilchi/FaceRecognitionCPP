@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-from model_pytorch import load_model
+from ..ModelLoader.model_pytorch import load_model
 
 
 def find_lfw_root(data_dir: Path) -> Path:
