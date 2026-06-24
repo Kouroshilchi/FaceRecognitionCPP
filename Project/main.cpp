@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\extracted_images";
 
-        const int64_t batch_size   = 16;      
+        const int64_t batch_size   = 64;      
         const int64_t embedding_dim = 128;
         const double  dropout       = 0.1;
         const int64_t epochs        = 10;
@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
         torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(1e-3));
         auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
-        const double margin = 0.5;
+        const double margin = 0.7;
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             model->train();
@@ -96,8 +96,8 @@ int main(int argc, char* argv[]) {
                 emb_n = torch::nn::functional::normalize(emb_n,
                     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
 
-                auto dist_ap = (emb_a - emb_p).pow(2).sum(1).sqrt();
-                auto dist_an = (emb_a - emb_n).pow(2).sum(1).sqrt();
+                auto dist_ap = (emb_a - emb_p).pow(2).sum(1);
+                auto dist_an = (emb_a - emb_n).pow(2).sum(1);
                 auto loss = torch::relu(dist_ap - dist_an + margin).mean();
 
                 if (loss.item<double>() == 0.0 && batch_index > 0) {
