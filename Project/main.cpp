@@ -7,23 +7,23 @@
 #include "include/dataset/TripletDataset.h"
 #include "include/model/TripletLoss.h"
 
-struct TripletCollate {
-    dataset::TripletBatch operator()(std::vector<dataset::TripletSample> samples) {
-        std::vector<torch::Tensor> anchors, positives, negatives, labels;
-        for (auto& s : samples) {
-            anchors.push_back(s.anchor);
-            positives.push_back(s.positive);
-            negatives.push_back(s.negative);
-            labels.push_back(s.label);
-        }
-        return {
-            torch::stack(anchors),
-            torch::stack(positives),
-            torch::stack(negatives),
-            torch::stack(labels)
-        };
-    }
-};
+// struct TripletCollate {
+//     dataset::TripletBatch operator()(std::vector<dataset::TripletSample> samples) {
+//         std::vector<torch::Tensor> anchors, positives, negatives, labels;
+//         for (auto& s : samples) {
+//             anchors.push_back(s.anchor);
+//             positives.push_back(s.positive);
+//             negatives.push_back(s.negative);
+//             labels.push_back(s.label);
+//         }
+//         return {
+//             torch::stack(anchors),
+//             torch::stack(positives),
+//             torch::stack(negatives),
+//             torch::stack(labels)
+//         };
+//     }
+// };
 
 int main(int argc, char* argv[]) {
     try {
@@ -36,6 +36,7 @@ int main(int argc, char* argv[]) {
         const double  dropout       = 0.1;
         const int64_t epochs        = 10;
         const cv::Size image_size{112, 112};
+        int64_t zero_loss_counter   = 0;
 
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
         std::cout << "Using device: " << device << std::endl;
@@ -49,7 +50,7 @@ int main(int argc, char* argv[]) {
 
         auto data_loader = torch::data::make_data_loader<torch::data::samplers::RandomSampler>(
             std::move(face_dataset),
-            torch::data::DataLoaderOptions().batch_size(batch_size).workers(4)
+            torch::data::DataLoaderOptions().batch_size(batch_size)
         );
 
         const size_t total_batches = (dataset_size + batch_size - 1) / batch_size;
@@ -100,6 +101,7 @@ int main(int argc, char* argv[]) {
                 auto loss = torch::relu(dist_ap - dist_an + margin).mean();
 
                 if (loss.item<double>() == 0.0 && batch_index > 0) {
+                    zero_loss_counter++;
                     ++batch_index;
                     continue;
                 }
@@ -117,6 +119,7 @@ int main(int argc, char* argv[]) {
                               << "Loss: " << loss.item<double>()
                               << " | d(a,p): " << dist_ap.mean().item<double>()
                               << " | d(a,n): " << dist_an.mean().item<double>()
+                              << "zero-loss" << zero_loss_counter
                               << std::endl;
                 }
 
