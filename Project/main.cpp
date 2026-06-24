@@ -102,8 +102,8 @@ int main(int argc, char* argv[]) {
 
                 if (loss.item<double>() == 0.0 && batch_index > 0) {
                     zero_loss_counter++;
-                    ++batch_index;
-                    continue;
+                    // ++batch_index;
+                    // continue;
                 }
 
                 loss.backward();
