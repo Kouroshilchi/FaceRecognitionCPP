@@ -1,4 +1,4 @@
-#include "../include/model/ResBlock.h"
+#include "../include/Model/ResBlock.h"
 
 namespace model {
 

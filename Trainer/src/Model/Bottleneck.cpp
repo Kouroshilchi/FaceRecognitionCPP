@@ -1,4 +1,4 @@
-#include "../include/model/Bottleneck.h"
+#include "../include/Model/Bottleneck.h"
 
 namespace model {
 

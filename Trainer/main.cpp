@@ -3,34 +3,16 @@
 #include <iostream>
 #include <string>
 #include <torch/optim/schedulers/step_lr.h>
-#include "include/model/Model.h"
-#include "include/dataset/TripletDataset.h"
-#include "include/model/TripletLoss.h"
-#include "include/model/HardMining.h"
-
-// struct TripletCollate {
-//     dataset::TripletBatch operator()(std::vector<dataset::TripletSample> samples) {
-//         std::vector<torch::Tensor> anchors, positives, negatives, labels;
-//         for (auto& s : samples) {
-//             anchors.push_back(s.anchor);
-//             positives.push_back(s.positive);
-//             negatives.push_back(s.negative);
-//             labels.push_back(s.label);
-//         }
-//         return {
-//             torch::stack(anchors),
-//             torch::stack(positives),
-//             torch::stack(negatives),
-//             torch::stack(labels)
-//         };
-//     }
-// };
+#include "include/Model/Model.h"
+#include "include/Dataset/TripletDataset.h"
+#include "include/Loss/TripletLoss.h"
+#include "include/Utils/HardMining.h"
 
 int main(int argc, char* argv[]) {
     try {
         const std::string dataset_root = (argc > 1)
             ? argv[1]
-            : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\extracted_images";
+            : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\data_casia";
 
         const int64_t batch_size   = 64;      
         const int64_t embedding_dim = 128;
@@ -105,7 +87,7 @@ int main(int argc, char* argv[]) {
                 // auto dist_an = (emb_a - emb_n).pow(2).sum(1);
                 // auto loss = torch::relu(dist_ap - dist_an + margin).mean();
 
-                auto hard_triplets = HardMining::select_hard_triplets(
+                auto hard_triplets = Utils::HardMining::select_hard_triplets(
                     all_embeddings, 
                     all_labels
                 );
@@ -144,7 +126,7 @@ int main(int argc, char* argv[]) {
                               << "Loss: " << loss.item<double>()
                               << " | d(a,p): " << dist_ap.mean().item<double>()
                               << " | d(a,n): " << dist_an.mean().item<double>()
-                              << "zero-loss" << zero_loss_counter
+                              << " | zero-loss: " << zero_loss_counter
                               << std::endl;
                 }
 

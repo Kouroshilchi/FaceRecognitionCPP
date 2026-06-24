@@ -1,6 +1,6 @@
 #include <torch/torch.h>
 #include <iostream>
-#include "include/model/Model.h"
+#include "../Trainer/include/Model/Model.h"
 #include <torch/csrc/jit/serialization/pickle.h>
 #include <fstream>
 

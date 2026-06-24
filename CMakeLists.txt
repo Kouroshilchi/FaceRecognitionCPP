@@ -22,16 +22,16 @@ set(IMGUI_DIR "C:/libs/imgui/imgui")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-file(GLOB_RECURSE PROJECT_SOURCE_FILES    "${CMAKE_CURRENT_SOURCE_DIR}/Project/src/*.cpp")
+file(GLOB_RECURSE PROJECT_SOURCE_FILES    "${CMAKE_CURRENT_SOURCE_DIR}/Trainer/src/*.cpp")
 file(GLOB_RECURSE PROJECTAPP_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/src/*.cpp")
 
 add_executable(FaceRecognitionCPP
-    "${CMAKE_CURRENT_SOURCE_DIR}/Project/main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Trainer/main.cpp"
     ${PROJECT_SOURCE_FILES}
 )
  
 target_include_directories(FaceRecognitionCPP PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Trainer/include"
     ${TORCH_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
@@ -44,12 +44,12 @@ target_link_libraries(FaceRecognitionCPP PRIVATE
 target_compile_features(FaceRecognitionCPP PRIVATE cxx_std_17)
 
 add_executable(ExportModel
-    "${CMAKE_CURRENT_SOURCE_DIR}/Project/export_model.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/utils/ModelExporter/export_model.cpp"
     ${PROJECT_SOURCE_FILES}
 )
 
 target_include_directories(ExportModel PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Trainer/include"
     ${TORCH_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
@@ -76,7 +76,7 @@ add_executable(FaceRecognitionAPP WIN32
 
 target_include_directories(FaceRecognitionAPP PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/appCPP/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Project/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Trainer/include"
     ${TORCH_INCLUDE_DIRS}       
     ${OpenCV_INCLUDE_DIRS}       
     ${IMGUI_DIR} 
@@ -103,7 +103,7 @@ if(MSVC)
         set_target_properties(${target} PROPERTIES
             VS_DEBUGGER_ENVIRONMENT "PATH=${OpenCV_DIR}/x64/vc16/bin;${TORCH_INSTALL_PREFIX}/lib;$ENV{PATH}"
         )
-    endforeach()
+    endforeach() 
 endif()
 
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")

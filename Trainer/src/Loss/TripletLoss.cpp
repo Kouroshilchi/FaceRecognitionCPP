@@ -1,7 +1,8 @@
-#include "../include/model/TripletLoss.h"
+#include "../include/Loss/TripletLoss.h"
 #include <iostream>
-
-torch::Tensor loss::TripletLossImpl::forward(const torch::Tensor& embeddings, const torch::Tensor& labels) {
+namespace Loss 
+{
+    torch::Tensor TripletLossImpl::forward(const torch::Tensor& embeddings, const torch::Tensor& labels) {
     auto N = embeddings.size(0);
     if (N <= 1) {
         return torch::zeros({}, embeddings.options());
@@ -39,4 +40,5 @@ torch::Tensor loss::TripletLossImpl::forward(const torch::Tensor& embeddings, co
 
     auto losses_valid = losses.masked_select(valid);
     return losses_valid.mean();
+}
 }

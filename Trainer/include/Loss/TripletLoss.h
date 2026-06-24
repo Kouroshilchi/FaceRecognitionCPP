@@ -1,7 +1,7 @@
 #pragma once
 #include <torch/torch.h>
 
-namespace loss {
+namespace Loss {
 
 struct TripletLossImpl : torch::nn::Module {
     explicit TripletLossImpl(double margin = 0.3) : margin_(margin) {}

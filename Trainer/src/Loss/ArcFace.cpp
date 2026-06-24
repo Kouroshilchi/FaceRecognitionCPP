@@ -1,6 +1,6 @@
-#include "../include/model/ArcFace.h"
+#include "../include/Loss/ArcFace.h"
 
-namespace model {
+namespace Loss {
 
 ArcFaceImpl::ArcFaceImpl(int64_t in_features, int64_t out_features, float s_, float m_, bool easy_margin_)
 : s(s_), m(m_), easy_margin(easy_margin_) {

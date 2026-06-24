@@ -1,6 +1,8 @@
-#include "../include/model/HardMining.h"
+#include "../include/Utils/HardMining.h"
 #include <algorithm>
 
+namespace Utils
+{
 torch::Tensor HardMining::pairwise_distances(torch::Tensor embeddings) {
     auto dot_product = torch::mm(embeddings, embeddings.transpose(0, 1));
     auto square_norm = torch::diag(dot_product);
@@ -74,4 +76,4 @@ std::vector<std::tuple<int, int, int>> HardMining::select_hard_triplets(
     }
     
     return triplets;
-}
+}}
