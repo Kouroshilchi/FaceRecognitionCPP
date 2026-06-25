@@ -47,17 +47,17 @@ namespace Loss
         return {loss, 0.0, 0.0};
     }
 
-    double avg_pos_dist = 0.0;
-    double avg_neg_dist = 0.0;
+    double avg_pos_cos = 0.0;
+    double avg_neg_cos = 0.0;
     
     auto hardest_pos_valid = hardest_pos.masked_select(valid);
     auto hardest_neg_valid = hardest_neg.masked_select(valid);
     
     if (hardest_pos_valid.numel() > 0) {
-        avg_pos_dist = hardest_pos_valid.mean().item<double>();
+        avg_pos_cos = hardest_pos_valid.mean().item<double>();
     }
     if (hardest_neg_valid.numel() > 0) {
-        avg_neg_dist = hardest_neg_valid.mean().item<double>();
+        avg_neg_cos = hardest_neg_valid.mean().item<double>();
     }
 
     auto losses_valid = losses.masked_select(valid);
@@ -68,6 +68,6 @@ namespace Loss
         loss = torch::tensor(0.0, embeddings.options());
     }
 
-    return {loss, avg_pos_dist, avg_neg_dist};
+    return {loss, avg_pos_cos, avg_neg_cos};
 }
 }
