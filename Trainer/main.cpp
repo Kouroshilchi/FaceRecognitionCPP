@@ -6,6 +6,34 @@
 #include "include/Model/Model.h"
 #include "include/Dataset/Dataset.h"
 #include "include/Loss/TripletLoss.h"
+#include <random>
+#include <map>
+
+std::vector<size_t> make_balanced_batch(
+    const std::vector<std::pair<std::string, int64_t>>& samples,
+    int P, int K,
+    std::mt19937& rng)
+{
+    std::map<int64_t, std::vector<size_t>> label_to_indices;
+    for (size_t i = 0; i < samples.size(); ++i)
+        label_to_indices[samples[i].second].push_back(i);
+
+    std::vector<int64_t> valid_classes;
+    for (auto& [label, indices] : label_to_indices)
+        if (indices.size() >= 2) valid_classes.push_back(label);
+
+    std::shuffle(valid_classes.begin(), valid_classes.end(), rng);
+    int p_actual = std::min(P, (int)valid_classes.size());
+
+    std::vector<size_t> batch_indices;
+    for (int i = 0; i < p_actual; ++i) {
+        auto& cls_indices = label_to_indices[valid_classes[i]];
+        std::shuffle(cls_indices.begin(), cls_indices.end(), rng);
+        for (int k = 0; k < K; ++k)
+            batch_indices.push_back(cls_indices[k % cls_indices.size()]);
+    }
+    return batch_indices;
+}
 
 int main(int argc, char* argv[]) {
     try {
@@ -13,7 +41,9 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\data_casia";
 
-        const int64_t batch_size   = 256;      
+        const int P = 32;
+        const int K = 8; 
+        const int64_t batch_size   = P * K;  
         const int64_t embedding_dim = 128;
         const double  dropout       = 0.1;
         const int64_t epochs        = 10;
@@ -30,13 +60,9 @@ int main(int argc, char* argv[]) {
         std::cout << "Classes found: " << num_classes << std::endl;
         std::cout << "Dataset size:  " << dataset_size << std::endl;
 
-        auto face_dataset = raw_dataset.map(torch::data::transforms::Stack<>());
-        auto data_loader = torch::data::make_data_loader<torch::data::samplers::RandomSampler>(
-            std::move(face_dataset),
-            torch::data::DataLoaderOptions().batch_size(batch_size)
-        );
+        const auto& all_samples = raw_dataset.samples();
 
-        const size_t total_batches = (dataset_size + batch_size - 1) / batch_size;
+        const size_t total_batches = dataset_size / batch_size;
         std::cout << "Total batches: " << total_batches << std::endl;
 
         auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
@@ -45,20 +71,29 @@ int main(int argc, char* argv[]) {
         torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(1e-3));
         auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
-        const double margin = 0.7;
+        const double margin = 0.5;
         auto triplet_loss = Loss::TripletLoss(margin);
+
+        std::mt19937 rng(42);
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             model->train();
             double   epoch_loss  = 0.0;
             int64_t  batch_index = 0;
 
-            for (auto& batch : *data_loader) {
+            for (size_t b = 0; b < total_batches; ++b) {
+                auto indices = make_balanced_batch(all_samples, P, K, rng);
+
+                std::vector<torch::Tensor> images, labels_vec;
+                for (size_t idx : indices) {
+                    auto ex = raw_dataset.get(idx);
+                    images.push_back(ex.data);
+                    labels_vec.push_back(ex.target);
+                }
+                auto inputs = torch::stack(images).to(device);
+                auto labels = torch::stack(labels_vec).to(device);
+
                 optimizer.zero_grad();
-
-                auto inputs = batch.data.to(device);
-                auto labels = batch.target.to(device);
-
                 auto embeddings = model->forward(inputs);
                 embeddings = torch::nn::functional::normalize(
                     embeddings,
@@ -68,9 +103,8 @@ int main(int argc, char* argv[]) {
                 auto metrics = triplet_loss->forward(embeddings, labels);
                 auto loss = metrics.loss;
 
-                if (loss.item<double>() == 0.0 && batch_index > 0) {
+                if (loss.item<double>() == 0.0 && batch_index > 0)
                     zero_loss_counter++;
-                }
 
                 loss.backward();
                 optimizer.step();
@@ -94,12 +128,9 @@ int main(int argc, char* argv[]) {
             }
 
             scheduler.step();
-            std::cout << "Epoch " << epoch << " done. "
-                      << "Avg loss: " << (epoch_loss / std::max<int64_t>(batch_index, 1))
-                      << std::endl;
-
+            std::cout << "Epoch " << epoch << " done. Avg loss: "
+                      << (epoch_loss / std::max<int64_t>(batch_index, 1)) << std::endl;
             torch::save(model, "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model.pt");
-            std::cout << "Model saved." << std::endl;
         }
 
         std::cout << "Training complete." << std::endl;

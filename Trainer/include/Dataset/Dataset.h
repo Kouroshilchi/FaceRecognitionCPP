@@ -16,6 +16,10 @@ struct FaceDataset : torch::data::datasets::Dataset<FaceDataset> {
 
     const std::vector<std::string>& classes() const noexcept;
     int64_t num_classes() const noexcept;
+    const std::vector<std::pair<std::string, int64_t>>& samples() const noexcept {
+        return samples_;
+    }
+    
 
 private:
     void scan_directory(const std::string& root_dir);
