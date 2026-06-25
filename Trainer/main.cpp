@@ -106,14 +106,9 @@ int main(int argc, char* argv[]) {
         torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(1e-3));
         auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
-        const double margin = 0.0;
+        const double margin = 0.2;
         // auto triplet_loss = Loss::TripletLoss(margin);
-        auto triplet_loss = Loss::ArcFace(
-            num_classes ,
-            embedding_dim,
-            64, 
-            0.5
-        );
+        auto triplet_loss = Loss::TripletLoss(margin);
         triplet_loss->to(device);
 
         std::mt19937 rng(42);
