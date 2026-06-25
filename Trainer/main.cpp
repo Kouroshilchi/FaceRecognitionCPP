@@ -4,9 +4,8 @@
 #include <string>
 #include <torch/optim/schedulers/step_lr.h>
 #include "include/Model/Model.h"
-#include "include/Dataset/TripletDataset.h"
+#include "include/Dataset/Dataset.h"
 #include "include/Loss/TripletLoss.h"
-#include "include/Utils/HardMining.h"
 
 int main(int argc, char* argv[]) {
     try {
@@ -24,13 +23,14 @@ int main(int argc, char* argv[]) {
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
         std::cout << "Using device: " << device << std::endl;
 
-        auto face_dataset = dataset::TripletDataset(dataset_root, image_size);
-        const int64_t num_classes  = face_dataset.num_classes();
-        const size_t  dataset_size = face_dataset.size().value();
+        auto raw_dataset = dataset::FaceDataset(dataset_root, image_size);
+        const int64_t num_classes  = raw_dataset.num_classes();
+        const size_t  dataset_size = raw_dataset.size().value();
 
         std::cout << "Classes found: " << num_classes << std::endl;
         std::cout << "Dataset size:  " << dataset_size << std::endl;
 
+        auto face_dataset = raw_dataset.map(torch::data::transforms::Stack<>());
         auto data_loader = torch::data::make_data_loader<torch::data::samplers::RandomSampler>(
             std::move(face_dataset),
             torch::data::DataLoaderOptions().batch_size(batch_size)
@@ -46,6 +46,7 @@ int main(int argc, char* argv[]) {
         // auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
         const double margin = 0.7;
+        auto triplet_loss = Loss::TripletLoss(margin);
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             model->train();
@@ -53,79 +54,33 @@ int main(int argc, char* argv[]) {
             int64_t  batch_index = 0;
 
             for (auto& batch : *data_loader) {
-                std::vector<torch::Tensor> a_list, p_list, n_list, l_list;
-                for (auto& s : batch) {
-                    a_list.push_back(s.anchor);
-                    p_list.push_back(s.positive);
-                    n_list.push_back(s.negative);
-                    l_list.push_back(s.label);
-                }
-
-                auto anchors   = torch::stack(a_list).to(device);
-                auto positives = torch::stack(p_list).to(device);
-                auto negatives = torch::stack(n_list).to(device);
-                auto labels = torch::stack(l_list).to(device);
-
                 optimizer.zero_grad();
 
-                auto emb_a = model->forward(anchors);
-                auto emb_p = model->forward(positives);
-                auto emb_n = model->forward(negatives);
+                auto inputs = batch.data.to(device);
+                auto labels = batch.target.to(device);
 
-                emb_a = torch::nn::functional::normalize(emb_a,
-                    torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
-                emb_p = torch::nn::functional::normalize(emb_p,
-                    torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
-                emb_n = torch::nn::functional::normalize(emb_n,
-                    torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
-                
-                auto dist_ap = (emb_a - emb_p).pow(2).sum(1);
-                auto dist_an = (emb_a - emb_n).pow(2).sum(1);      
-                auto all_embeddings = torch::cat({emb_a, emb_p, emb_n}, 0);
-                auto all_labels = torch::cat({labels, labels, labels}, 0);
-                // auto dist_ap = (emb_a - emb_p).pow(2).sum(1);
-                // auto dist_an = (emb_a - emb_n).pow(2).sum(1);
-                // auto loss = torch::relu(dist_ap - dist_an + margin).mean();
-
-                auto hard_triplets = Utils::HardMining::select_hard_triplets(
-                    all_embeddings, 
-                    all_labels
+                auto embeddings = model->forward(inputs);
+                embeddings = torch::nn::functional::normalize(
+                    embeddings,
+                    torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
                 );
 
-                torch::Tensor loss = torch::zeros({}, device);
-                if (!hard_triplets.empty()) {
-                    for (auto [a, p, n] : hard_triplets) {
-                        auto anchor_emb   = all_embeddings[a];
-                        auto positive_emb = all_embeddings[p];
-                        auto negative_emb = all_embeddings[n];
-                        auto triplet_loss = torch::relu(
-                            (anchor_emb - positive_emb).pow(2).sum() - 
-                            (anchor_emb - negative_emb).pow(2).sum() + 0.2
-                        );
-                        loss += triplet_loss;
-                    }
-                    loss = loss / static_cast<double>(hard_triplets.size());
-                }
+                auto loss = triplet_loss->forward(embeddings, labels);
 
                 if (loss.item<double>() == 0.0 && batch_index > 0) {
                     zero_loss_counter++;
-                    // ++batch_index;
-                    // continue;
                 }
 
                 loss.backward();
-                // torch::nn::utils::clip_grad_norm_(model->parameters(), 1.0);
                 optimizer.step();
 
                 epoch_loss += loss.item<double>();
                 ++batch_index;
 
-                if (batch_index % 1 == 0) {
+                if (batch_index % 10 == 0) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss.item<double>()
-                              << " | d(a,p): " << dist_ap.mean().item<double>()
-                              << " | d(a,n): " << dist_an.mean().item<double>()
                               << " | zero-loss: " << zero_loss_counter
                               << std::endl;
                 }
