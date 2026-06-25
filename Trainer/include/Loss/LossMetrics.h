@@ -6,8 +6,8 @@ namespace Loss {
 
 struct LossMetrics {
     torch::Tensor loss;
-    double avg_pos_cos;
-    double avg_neg_cos;
+    double avg_pos_metric;
+    double avg_neg_metric;
 };
 
 } // namespace Loss

@@ -14,9 +14,8 @@ namespace Loss
     
     auto sq = embeddings.pow(2).sum(1); 
     auto dist = sq.unsqueeze(1) + sq.unsqueeze(0) - 2.0 * embeddings.matmul(embeddings.t());
-    
+
     dist = torch::clamp_min(dist, 1e-12);
-    dist = torch::sqrt(dist);
 
     auto labels1 = labels.view({-1, 1});
     auto eq = labels1.eq(labels1.t());     
@@ -47,17 +46,17 @@ namespace Loss
         return {loss, 0.0, 0.0};
     }
 
-    double avg_pos_cos = 0.0;
-    double avg_neg_cos = 0.0;
+    double avg_pos_metric = 0.0;
+    double avg_neg_metric = 0.0;
     
     auto hardest_pos_valid = hardest_pos.masked_select(valid);
     auto hardest_neg_valid = hardest_neg.masked_select(valid);
     
     if (hardest_pos_valid.numel() > 0) {
-        avg_pos_cos = hardest_pos_valid.mean().item<double>();
+        avg_pos_metric = hardest_pos_valid.mean().item<double>();
     }
     if (hardest_neg_valid.numel() > 0) {
-        avg_neg_cos = hardest_neg_valid.mean().item<double>();
+        avg_neg_metric = hardest_neg_valid.mean().item<double>();
     }
 
     auto losses_valid = losses.masked_select(valid);
@@ -68,6 +67,6 @@ namespace Loss
         loss = torch::tensor(0.0, embeddings.options());
     }
 
-    return {loss, avg_pos_cos, avg_neg_cos};
+    return {loss, avg_pos_metric, avg_neg_metric};
 }
 }

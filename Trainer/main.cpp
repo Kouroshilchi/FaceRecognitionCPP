@@ -195,8 +195,8 @@ int main(int argc, char* argv[]) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss_value
-                              << " | Pos-dist: " << metrics.avg_pos_cos
-                              << " | Neg-dist: " << metrics.avg_neg_cos
+                              << " | Pos-metric: " << metrics.avg_pos_metric
+                              << " | Neg-metric: " << metrics.avg_neg_metric
                               << " | Zero-loss: " << zero_loss_counter
                               << " | NaN-loss: " << nan_loss_counter
                               << " | Embedding norm mean: " << embeddings.norm(2, 1).mean().item<double>()

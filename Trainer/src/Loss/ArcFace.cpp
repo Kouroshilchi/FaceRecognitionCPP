@@ -53,17 +53,17 @@ LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
     auto loss = torch::nn::functional::cross_entropy(output, labels);
 
     // ====================== Metrics ======================
-    double avg_pos_cos = 0.0;
-    double avg_neg_cos = 0.0;
+    double avg_pos_metric = 0.0;
+    double avg_neg_metric = 0.0;
 
     // Cosine similarity به کلاس درست (Positive)
     auto pos_cos = torch::sum(cos_theta * one_hot, 1);  // [batch_size]
-    avg_pos_cos = pos_cos.mean().item<double>();
+    avg_pos_metric = pos_cos.mean().item<double>();
 
     // Hardest Negative: حداکثر cosine similarity به کلاس‌های اشتباه
     auto cos_theta_neg = cos_theta.masked_fill(one_hot.to(torch::kBool), -1e9);
     auto hardest_neg_cos = std::get<0>(cos_theta_neg.max(1));
-    avg_neg_cos = hardest_neg_cos.mean().item<double>();
+    avg_neg_metric = hardest_neg_cos.mean().item<double>();
 
     // NaN check
     if (std::isnan(loss.item<double>())) {
@@ -71,7 +71,7 @@ LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
         loss = torch::tensor(0.0, embeddings.options());
     }
 
-    return {loss, avg_pos_cos, avg_neg_cos};
+    return {loss, avg_pos_metric, avg_neg_metric};
 }
 
 } // namespace Loss
