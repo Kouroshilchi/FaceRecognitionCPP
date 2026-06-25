@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
         model->to(device);
 
         torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(1e-3));
-        // auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
+        auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
         const double margin = 0.7;
         auto triplet_loss = Loss::TripletLoss(margin);
@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
                 epoch_loss += loss.item<double>();
                 ++batch_index;
 
-                if (batch_index % 10 == 0) {
+                if (batch_index % 1 == 0) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss.item<double>()
@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            // scheduler.step();
+            scheduler.step();
             std::cout << "Epoch " << epoch << " done. "
                       << "Avg loss: " << (epoch_loss / std::max<int64_t>(batch_index, 1))
                       << std::endl;
