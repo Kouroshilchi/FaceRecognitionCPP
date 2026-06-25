@@ -2,10 +2,10 @@
 #include <iostream>
 namespace Loss 
 {
-    torch::Tensor TripletLossImpl::forward(const torch::Tensor& embeddings, const torch::Tensor& labels) {
+    LossMetrics TripletLossImpl::forward(const torch::Tensor& embeddings, const torch::Tensor& labels) {
     auto N = embeddings.size(0);
     if (N <= 1) {
-        return torch::zeros({}, embeddings.options());
+        return {torch::zeros({}, embeddings.options()), 0.0, 0.0};
     }
 
     auto device = embeddings.device();
@@ -34,11 +34,24 @@ namespace Loss
     auto has_pos = eq.any(1);
     auto has_neg = neq.any(1);
     auto valid = has_pos.logical_and(has_neg);
+    
+    // Calculate average distances
+    double avg_pos_dist = 0.0;
+    double avg_neg_dist = 0.0;
+    
+    if (valid.sum().item<int64_t>() > 0) {
+        auto hardest_pos_valid = hardest_pos.masked_select(valid);
+        auto hardest_neg_valid = hardest_neg.masked_select(valid);
+        avg_pos_dist = hardest_pos_valid.mean().item<double>();
+        avg_neg_dist = hardest_neg_valid.mean().item<double>();
+    }
+    
     if (valid.sum().item<int64_t>() == 0) {
-        return torch::zeros({}, embeddings.options()).requires_grad_(true);
+        auto loss = torch::zeros({}, embeddings.options()).requires_grad_(true);
+        return {loss, 0.0, 0.0};
     }
 
     auto losses_valid = losses.masked_select(valid);
-    return losses_valid.mean();
+    return {losses_valid.mean(), avg_pos_dist, avg_neg_dist};
 }
 }

@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\data_casia";
 
-        const int64_t batch_size   = 64;      
+        const int64_t batch_size   = 256;      
         const int64_t embedding_dim = 128;
         const double  dropout       = 0.1;
         const int64_t epochs        = 10;
@@ -65,7 +65,8 @@ int main(int argc, char* argv[]) {
                     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
                 );
 
-                auto loss = triplet_loss->forward(embeddings, labels);
+                auto metrics = triplet_loss->forward(embeddings, labels);
+                auto loss = metrics.loss;
 
                 if (loss.item<double>() == 0.0 && batch_index > 0) {
                     zero_loss_counter++;
@@ -81,6 +82,8 @@ int main(int argc, char* argv[]) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss.item<double>()
+                              << " | Pos-dist: " << metrics.avg_pos_dist
+                              << " | Neg-dist: " << metrics.avg_neg_dist
                               << " | zero-loss: " << zero_loss_counter
                               << std::endl;
                 }
