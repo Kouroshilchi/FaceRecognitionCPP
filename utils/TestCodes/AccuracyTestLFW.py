@@ -7,11 +7,15 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
+import sys
+from pathlib import Path
 
-from ..ModelLoader.model_pytorch import load_model
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(Path(ROOT / "ModelLoader")))
+from model_pytorch import load_model
 
 
-def find_lfw_root(data_dir: Path) -> Path:
+def find_lfw_root(data_dir: Path) -> Path: 
     root = data_dir / "lfw-deepfunneled"
     if not root.exists():
         raise FileNotFoundError(f"Could not find lfw-deepfunneled under {data_dir}")
@@ -121,7 +125,7 @@ def main():
     parser.add_argument(
         "--weights",
         type=Path,
-        default=Path(__file__).resolve().parent.parent / "models" / "model_weights.pt",
+        default=r"C:\Users\kuoro\Documents\GitHub\FaceRecognitionCPP\models\model_weights.pt",
         help="Path to the PyTorch model weights file.",
     )
     parser.add_argument(
