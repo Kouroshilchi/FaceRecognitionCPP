@@ -1,22 +1,33 @@
 #pragma once
+
 #include <torch/torch.h>
+#include "LossMetrics.h"
 
 namespace Loss {
 
-struct ArcFaceImpl : torch::nn::Module {
-    ArcFaceImpl(int64_t in_features, int64_t out_features, float s = 42.0, float m = 0.5, bool easy_margin = false);
+class ArcFaceImpl : public torch::nn::Module {
+public:
+    ArcFaceImpl(int64_t num_classes, 
+                int64_t embedding_dim,
+                double scale = 30.0, 
+                double margin = 0.5);
 
-    torch::Tensor forward(torch::Tensor features, torch::Tensor labels);
+    LossMetrics forward(const torch::Tensor& embeddings, 
+                         const torch::Tensor& labels);
 
-    torch::Tensor weight;
-    float s;
-    float m;
-    float cos_m;
-    float sin_m;
-    float thresh;
-    float mm;
-    bool easy_margin;
+    // Getter and Setter
+    void set_scale(double s) { s_ = s; }
+    void set_margin(double m) { m_ = m; }
+    double get_scale() const { return s_; }
+    double get_margin() const { return m_; }
+
+private:
+    torch::Tensor weight_;  // [num_classes, embedding_dim]
+
+    double s_;  // scale factor
+    double m_;  // angular margin
 };
+
 TORCH_MODULE(ArcFace);
 
-}
+} // namespace Loss

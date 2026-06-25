@@ -30,12 +30,8 @@ namespace model {
         layer4 = register_module("layer4", make_layer(512, 3, 2));
 
         avgpool       = register_module("avgpool",       torch::nn::AdaptiveAvgPool2d(torch::nn::AdaptiveAvgPool2dOptions({1, 1})));
-        fc1           = register_module("fc1",           torch::nn::Linear(torch::nn::LinearOptions(512 * model::BottleneckImpl::expansion, 256).bias(false)));
-        bn_fc1        = register_module("bn_fc1",        torch::nn::BatchNorm1d(256));
-        fc2           = register_module("fc2",           torch::nn::Linear(torch::nn::LinearOptions(256, 512).bias(false)));
-        bn_fc2        = register_module("bn_fc2",        torch::nn::BatchNorm1d(512));
-        fc3           = register_module("fc3",           torch::nn::Linear(512, out_dim));
-        // bn_fc3        = register_module("bn_fc3",        torch::nn::BatchNorm1d(out_dim));
+        fc1           = register_module("fc1",           torch::nn::Linear(torch::nn::LinearOptions(512 * model::BottleneckImpl::expansion, out_dim)));
+        bn1_fc1        = register_module("bn1_fc1",        torch::nn::BatchNorm1d(out_dim));
         dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
 
         load_pretrained_weights("C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\resnet50_weights.pt");
@@ -134,17 +130,7 @@ torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
     x = x.view({x.size(0), -1});
 
     x = fc1->forward(x);
-    x = bn_fc1->forward(x);
-    // x = relu->forward(x);
-    x = dropout_layer->forward(x);
+    x = bn1_fc1->forward(x);
 
-    x = fc2->forward(x);
-    x = bn_fc2->forward(x);
-    // x = relu->forward(x);
-    x = dropout_layer->forward(x);
-
-    x = fc3->forward(x);
-    // x = bn_fc3->forward(x);
-
-    return x;
+    return torch::nn::functional::normalize(x, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));;
 }

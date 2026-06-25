@@ -6,6 +6,7 @@
 #include "include/Model/Model.h"
 #include "include/Dataset/Dataset.h"
 #include "include/Loss/TripletLoss.h"
+#include "include/Loss/ArcFace.h"
 #include <random>
 #include <map>
 #include <cstdlib>
@@ -69,8 +70,8 @@ int main(int argc, char* argv[]) {
             : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\data_casia";
 
         const int P = 32;
-        const int K = 8; 
-        const int64_t batch_size   = P * K;  
+        const int K = 4; 
+        const int64_t batch_size   = P * K;          
         const int64_t embedding_dim = 128;
         const double  dropout       = 0.1;
         const int64_t epochs        = 10;
@@ -105,8 +106,14 @@ int main(int argc, char* argv[]) {
         torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(1e-3));
         auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
-        const double margin = 0.5;
-        auto triplet_loss = Loss::TripletLoss(margin);
+        const double margin = 0.0;
+        // auto triplet_loss = Loss::TripletLoss(margin);
+        auto triplet_loss = Loss::ArcFace(
+            num_classes ,
+            embedding_dim,
+            64, 
+            0.5
+        );
         triplet_loss->to(device);
 
         std::mt19937 rng(42);
@@ -159,10 +166,10 @@ int main(int argc, char* argv[]) {
                 
                 auto embeddings = model->forward(inputs);
                 
-                embeddings = torch::nn::functional::normalize(
-                    embeddings,
-                    torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
-                );
+                // embeddings = torch::nn::functional::normalize(
+                //     embeddings,
+                //     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
+                // );
 
                 auto metrics = triplet_loss->forward(embeddings, labels);
                 auto loss = metrics.loss;
@@ -193,10 +200,11 @@ int main(int argc, char* argv[]) {
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "Loss: " << loss_value
-                              << " | Pos-dist: " << metrics.avg_pos_dist
-                              << " | Neg-dist: " << metrics.avg_neg_dist
+                              << " | Pos-dist: " << metrics.avg_pos_cos
+                              << " | Neg-dist: " << metrics.avg_neg_cos
                               << " | Zero-loss: " << zero_loss_counter
                               << " | NaN-loss: " << nan_loss_counter
+                              << " | Embedding norm mean: " << embeddings.norm(2, 1).mean().item<double>()
                               << std::endl;
                 }
 

@@ -26,11 +26,7 @@ namespace model {
 
         torch::nn::AdaptiveAvgPool2d avgpool{nullptr};
         torch::nn::Linear fc1{nullptr};
-        torch::nn::BatchNorm1d bn_fc1{nullptr};
-        torch::nn::Linear fc2{nullptr};
-        torch::nn::BatchNorm1d bn_fc2{nullptr};
-        torch::nn::Linear fc3{nullptr};
-        // torch::nn::BatchNorm1d bn_fc3{nullptr};
+        torch::nn::BatchNorm1d bn1_fc1{nullptr};
         torch::nn::Dropout dropout_layer{nullptr};
     };
     TORCH_MODULE(FaceRecognitionProjector);
