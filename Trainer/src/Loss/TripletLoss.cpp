@@ -1,21 +1,25 @@
 #include "../include/Loss/TripletLoss.h"
 #include <iostream>
+#include <cmath>
+
 namespace Loss 
 {
     LossMetrics TripletLossImpl::forward(const torch::Tensor& embeddings, const torch::Tensor& labels) {
     auto N = embeddings.size(0);
     if (N <= 1) {
-        return {torch::zeros({}, embeddings.options()), 0.0, 0.0};
+        return {torch::tensor(0.0, embeddings.options()), 0.0, 0.0};
     }
 
     auto device = embeddings.device();
-    auto sq = embeddings.pow(2).sum(1);
+    
+    auto sq = embeddings.pow(2).sum(1); 
     auto dist = sq.unsqueeze(1) + sq.unsqueeze(0) - 2.0 * embeddings.matmul(embeddings.t());
-    dist = torch::clamp_min(dist, 0.0);
-    dist = torch::sqrt(dist + 1e-12);
+    
+    dist = torch::clamp_min(dist, 1e-12);
+    dist = torch::sqrt(dist);
 
     auto labels1 = labels.view({-1, 1});
-    auto eq = labels1.eq(labels1.t());
+    auto eq = labels1.eq(labels1.t());     
     auto neq = labels1.ne(labels1.t());
 
     auto eye = torch::eye(N, torch::TensorOptions().device(device).dtype(torch::kBool));
@@ -35,23 +39,35 @@ namespace Loss
     auto has_neg = neq.any(1);
     auto valid = has_pos.logical_and(has_neg);
     
-    // Calculate average distances
-    double avg_pos_dist = 0.0;
-    double avg_neg_dist = 0.0;
-    
-    if (valid.sum().item<int64_t>() > 0) {
-        auto hardest_pos_valid = hardest_pos.masked_select(valid);
-        auto hardest_neg_valid = hardest_neg.masked_select(valid);
-        avg_pos_dist = hardest_pos_valid.mean().item<double>();
-        avg_neg_dist = hardest_neg_valid.mean().item<double>();
-    }
-    
-    if (valid.sum().item<int64_t>() == 0) {
-        auto loss = torch::zeros({}, embeddings.options()).requires_grad_(true);
+    int64_t valid_count = valid.sum().item<int64_t>();
+
+    if (valid_count == 0) {
+        std::cerr << "Warning: No valid triplet samples in current batch!" << std::endl;
+        auto loss = torch::tensor(0.0, embeddings.options());
         return {loss, 0.0, 0.0};
     }
 
+    double avg_pos_dist = 0.0;
+    double avg_neg_dist = 0.0;
+    
+    auto hardest_pos_valid = hardest_pos.masked_select(valid);
+    auto hardest_neg_valid = hardest_neg.masked_select(valid);
+    
+    if (hardest_pos_valid.numel() > 0) {
+        avg_pos_dist = hardest_pos_valid.mean().item<double>();
+    }
+    if (hardest_neg_valid.numel() > 0) {
+        avg_neg_dist = hardest_neg_valid.mean().item<double>();
+    }
+
     auto losses_valid = losses.masked_select(valid);
-    return {losses_valid.mean(), avg_pos_dist, avg_neg_dist};
+    auto loss = losses_valid.mean();
+    
+    if (std::isnan(loss.item<double>())) {
+        std::cerr << "Warning: NaN loss detected!" << std::endl;
+        loss = torch::tensor(0.0, embeddings.options());
+    }
+
+    return {loss, avg_pos_dist, avg_neg_dist};
 }
 }
