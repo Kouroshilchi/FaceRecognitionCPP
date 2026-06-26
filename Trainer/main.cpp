@@ -90,8 +90,8 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : (repo_root / "data" / "data_casia").string();
 
-        const int P = 16;            
-        const int K = 8;               
+        const int P = 20;            
+        const int K = 10;               
         const int64_t batch_size   = P * K;       
         const int64_t embedding_dim = 128;
         const double  dropout       = 0.1;
@@ -289,6 +289,15 @@ int main(int argc, char* argv[]) {
             auto save_path = get_model_save_path();
             torch::save(model, save_path);
             std::cout << "Model saved to: " << save_path << std::endl;
+            
+            if (epoch % 10 == 0) {
+                std::string epoch_filename = "model_epoch_" + std::to_string(epoch) + ".pt";
+                auto epoch_save_path = get_repo_root() / "models" / epoch_filename;
+                
+                torch::save(model, epoch_save_path.string());
+                std::cout << "Epoch checkpoint saved to: " << epoch_save_path << std::endl;
+            }
+            
             std::cout << "================================\n" << std::endl;
         }
 
