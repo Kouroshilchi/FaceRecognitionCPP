@@ -113,19 +113,19 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(r"C:\Users\kuoro\Documents\GitHub\FaceRecognitionCPP\data\data_LFW"),
+        default=Path(__file__).resolve().parent.parent.parent / "data" / "data_LFW",
         help="Root folder for LFW files.",
     )
     parser.add_argument(
         "--pairs-file",
         type=Path,
-        default=r"C:\Users\kuoro\Documents\GitHub\FaceRecognitionCPP\data\data_LFW\pairs.csv",
+        default=Path(__file__).resolve().parent.parent.parent / "data" / "data_LFW" / "pairs.csv",
         help="CSV file with pair definitions. Default: pairs.csv in the data directory.",
     )
     parser.add_argument(
         "--weights",
         type=Path,
-        default=r"C:\Users\kuoro\Documents\GitHub\FaceRecognitionCPP\models\model_weights.pt",
+        default=Path(__file__).resolve().parent.parent.parent / "models" / "model_weights.pt",
         help="Path to the PyTorch model weights file.",
     )
     parser.add_argument(

@@ -11,6 +11,12 @@ import pickle
 import mediapipe as mp
 import threading
 import faiss
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+MODEL_LOADER_DIR = ROOT.parent / "utils" / "ModelLoader"
+sys.path.insert(0, str(MODEL_LOADER_DIR))
 
 from model_pytorch import load_model  
 
@@ -32,7 +38,8 @@ except Exception as e:
 
 transform = transforms.Compose([
     transforms.Resize((112, 112)),
-    transforms.ToTensor(),      
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
 db_path   = 'face_embeddings.pkl'

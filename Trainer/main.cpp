@@ -21,12 +21,18 @@ std::string get_home_dir() {
     return home ? home : ".";
 }
 
+std::filesystem::path get_repo_root() {
+    std::filesystem::path source_path(__FILE__);
+    auto root = source_path.parent_path().parent_path();
+    return root;
+}
+
 std::string get_model_save_path() {
-    return "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model.pt";
+    return (get_repo_root() / "models" / "model.pt").string();
 }
 
 std::string get_weights_path() {
-    return "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\resnet50_weights.pt";
+    return (get_repo_root() / "models" / "resnet50_weights.pt").string();
 }
 
 std::vector<size_t> make_balanced_batch(
@@ -65,9 +71,10 @@ std::vector<size_t> make_balanced_batch(
 
 int main(int argc, char* argv[]) {
     try {
+        const std::filesystem::path repo_root = get_repo_root();
         const std::string dataset_root = (argc > 1)
             ? argv[1]
-            : "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\data\\data_casia";
+            : (repo_root / "data" / "data_casia").string();
 
         const int P = 32;
         const int K = 4; 

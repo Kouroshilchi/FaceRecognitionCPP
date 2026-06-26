@@ -1,4 +1,5 @@
 #include "../include/Model/projector.h"
+#include <filesystem>
 
 namespace model {
     FaceRecognitionProjectorImpl::FaceRecognitionProjectorImpl(
@@ -34,7 +35,13 @@ namespace model {
         bn1_fc1        = register_module("bn1_fc1",        torch::nn::BatchNorm1d(out_dim));
         dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
 
-        load_pretrained_weights("C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\resnet50_weights.pt");
+        try {
+            auto repo_root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
+            auto default_weights = repo_root / "models" / "resnet50_weights.pt";
+            load_pretrained_weights(default_weights.string());
+        } catch (const std::exception& ex) {
+            std::cerr << "Warning: pretrained weights not loaded: " << ex.what() << std::endl;
+        }
     }
 
     void FaceRecognitionProjectorImpl::load_pretrained_weights(const std::string& weight_path) {

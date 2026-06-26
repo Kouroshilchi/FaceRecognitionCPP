@@ -11,10 +11,14 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <array>
 #include <filesystem>
-#include "../Project/include/model/Model.h"
+#include "../Trainer/include/Model/Model.h"
 
 using namespace cv;
+static torch::Device g_device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+static const std::array<float, 3> kImageMean = {0.485f, 0.456f, 0.406f};
+static const std::array<float, 3> kImageStd  = {0.229f, 0.224f, 0.225f};
 
 namespace paths {
     const std::string embeds_file = "embeddings.pt";
@@ -157,7 +161,11 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
         faceROI.convertTo(faceROI, CV_32F, 1.0 / 255.0);
 
         auto tensor = torch::from_blob(faceROI.data, {faceROI.rows, faceROI.cols, 3}, torch::kFloat32);
-        tensor = tensor.permute({2, 0, 1}).clone().unsqueeze(0).to(torch::kCUDA); 
+        tensor = tensor.permute({2, 0, 1}).clone().unsqueeze(0);
+        tensor[0][0] = (tensor[0][0] - kImageMean[0]) / kImageStd[0];
+        tensor[0][1] = (tensor[0][1] - kImageMean[1]) / kImageStd[1];
+        tensor[0][2] = (tensor[0][2] - kImageMean[2]) / kImageStd[2];
+        tensor = tensor.to(g_device);
 
         torch::Tensor embed_ = model->forward(tensor);
         float confidence = 0.0;
@@ -330,7 +338,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     } catch (const c10::Error& e) {
         g_modelLog += "Error loading model.\n";
     }
-    model->to(torch::kCUDA);
+    model->to(g_device);
     model->eval();
 
     char nameInputBuf[128] = "";

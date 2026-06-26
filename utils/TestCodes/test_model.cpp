@@ -1,8 +1,8 @@
 #pragma once
 
 #include <torch/torch.h>
-#include "../Project/include/model/projector.h"
-#include "../Project/include/model/Model.h"
+#include "../Trainer/include/Model/projector.h"
+#include "../Trainer/include/Model/Model.h"
 #include <iostream>
 
 bool testFaceRecognitionProjector(int in_channel, int out_dim, double dropout) {

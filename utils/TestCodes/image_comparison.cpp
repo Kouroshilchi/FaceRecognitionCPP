@@ -3,7 +3,7 @@
 #include <iostream>
 #include <string>
 #include <cmath>
-#include "include/model/Model.h"
+#include "../Trainer/include/Model/Model.h"
 
 torch::Tensor load_and_preprocess_image(const std::string& image_path, const cv::Size& image_size) {
     cv::Mat img = cv::imread(image_path);

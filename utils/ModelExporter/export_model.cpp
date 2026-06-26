@@ -1,6 +1,7 @@
 #include <torch/torch.h>
 #include <iostream>
-#include "Model/Model.h"
+#include <filesystem>
+#include "../Trainer/include/Model/Model.h"
 #include <torch/csrc/jit/serialization/pickle.h>
 #include <fstream>
 
@@ -11,8 +12,10 @@ int main() {
 
         std::cout << "Loading model..." << std::endl;
         
-        auto model = model::FaceRecognitionModel(3, embedding_dim, dropout); 
-        torch::load(model, "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model.pt");
+        auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
+        auto repo_root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        auto model_path = repo_root / "models" / "model.pt";
+        torch::load(model, model_path.string());
         
         
         
@@ -34,10 +37,11 @@ int main() {
 
         auto bytes = torch::pickle_save(dict);
 
-        std::ofstream fout("C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model_weights.pt", std::ios::out | std::ios::binary);
+        auto output_path = (repo_root / "models" / "model_weights.pt").string();
+        std::ofstream fout(output_path, std::ios::out | std::ios::binary);
         fout.write(bytes.data(), bytes.size());
         fout.close();
-        std::cout << "State dict saved to model_state.pt" << std::endl;
+        std::cout << "State dict saved to model_weights.pt" << std::endl;
 
         std::cout << "Done!" << std::endl;
 
