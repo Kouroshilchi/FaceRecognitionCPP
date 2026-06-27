@@ -167,7 +167,6 @@ std::vector<std::pair<std::filesystem::path, torch::Tensor>> AccuracyLFW::build_
 
         torch::Tensor batch = torch::cat(tensors, 0);
         torch::NoGradGuard no_grad;
-        model_.to(device_);
         model_->eval();
         auto output = model_->embed(batch);
         auto norms = output.norm(2, 1, true).clamp_min(1e-12);

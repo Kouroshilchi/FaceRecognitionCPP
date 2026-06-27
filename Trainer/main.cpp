@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
 
         auto raw_dataset_valid = dataset::FaceDataset(dataset_valid_root, image_size);
         const size_t valid_dataset_size = raw_dataset_valid.size().value();
-        const int64_t num_classes = raw_dataset_valid.num_classes();
+        const int64_t num_classes_valid = raw_dataset_valid.num_classes();
         
         auto dataloader = torch::data::make_data_loader(
             std::move(raw_dataset) , 
