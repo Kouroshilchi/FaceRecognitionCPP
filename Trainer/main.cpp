@@ -4,6 +4,7 @@
 #include <string>
 #include <torch/optim/schedulers/step_lr.h>
 #include "include/Model/Model.h"
+#include "include/Model/FaceNet.h"
 #include "include/Dataset/Dataset.h"
 #include "include/Loss/TripletLoss.h"
 #include "include/Loss/ArcFace.h"
@@ -122,40 +123,39 @@ int main(int argc, char* argv[]) {
         const size_t total_batches = dataset_size / batch_size;
         std::cout << "Total batches per epoch: " << total_batches << std::endl;
 
-        auto model = model::FaceRecognitionModel(3, embedding_dim, dropout);
-        model->to(device);
-        model->train();
-
-        // Initialize ArcFace loss module (replaces TripletLoss)
-        auto arcface = Loss::ArcFace(num_classes, embedding_dim, 64.0, 0.5);
-        arcface->to(device);
+        // Use FaceNet wrapper (backbone + ArcFace head)
+        auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 64.0, 0.5);
+        facenet->to(device);
+        facenet->train();
 
         // Use separate learning rates for the backbone model and ArcFace head
         const double model_lr = 1e-3;
         const double arcface_lr = 1e-5;
 
-        std::vector<torch::Tensor> model_params;
-        for (auto &p : model->parameters()) model_params.push_back(p);
+        std::vector<torch::Tensor> facenet_params;
+        for (auto &p : facenet->parameters()) facenet_params.push_back(p);
 
-        std::vector<torch::Tensor> arcface_params;
-        for (auto &p : arcface->parameters()) arcface_params.push_back(p);
-
-        torch::optim::Adam optimizer_model(model_params, torch::optim::AdamOptions(model_lr));
-        torch::optim::Adam optimizer_arcface(arcface_params, torch::optim::AdamOptions(arcface_lr));
-        auto scheduler_model = torch::optim::StepLR(optimizer_model, 5, 0.5);
-        auto scheduler_arcface = torch::optim::StepLR(optimizer_arcface, 5, 0.5);
+        torch::optim::Adam optimizer_facenet(facenet_params, torch::optim::AdamOptions(model_lr));
+        auto scheduler_facenet = torch::optim::StepLR(optimizer_facenet, 5, 0.5);
 
         std::cout << "Optimizer config: model_lr=" << model_lr
                   << ", arcface_lr=" << arcface_lr << std::endl;
 
         std::mt19937 rng(42);
 
+        // Prepare validation indices (10% of data)
+        size_t val_size = std::max<size_t>(1, dataset_size / 10);
+        std::vector<size_t> all_idx(dataset_size);
+        for (size_t i = 0; i < dataset_size; ++i) all_idx[i] = i;
+        std::shuffle(all_idx.begin(), all_idx.end(), rng);
+        std::vector<size_t> val_indices(all_idx.begin(), all_idx.begin() + val_size);
+
         double best_avg_loss = std::numeric_limits<double>::infinity();
         int no_improve_epochs = 0;
         const int patience = 10; 
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
-            model->train();
+            facenet->train();
             double   epoch_loss  = 0.0;
             int64_t  batch_index = 0;
             int64_t  skip_count   = 0;
@@ -208,17 +208,9 @@ int main(int argc, char* argv[]) {
                 auto inputs = torch::stack(images).to(device);
                 auto labels = torch::stack(labels_vec).to(device);
 
-                optimizer_model.zero_grad();
-                optimizer_arcface.zero_grad();
-                
-                auto embeddings = model->forward(inputs);
+                optimizer_facenet.zero_grad();
 
-                // embeddings = torch::nn::functional::normalize(
-                //     embeddings,
-                //     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
-                // );
-
-                auto metrics = arcface->forward(embeddings, labels);
+                auto metrics = facenet->forward(inputs, labels);
                 auto loss = metrics.loss;
 
                 double loss_value = loss.item<double>();
@@ -236,10 +228,9 @@ int main(int argc, char* argv[]) {
 
                 loss.backward();
                 
-                // torch::nn::utils::clip_grad_norm_(model->parameters(), 5.0);  
-                
-                optimizer_model.step();
-                optimizer_arcface.step();
+                // torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
+
+                optimizer_facenet.step();
 
                 epoch_loss += loss_value;
                 avg_pos_metric_sum += metrics.avg_pos_metric;
@@ -267,7 +258,7 @@ int main(int argc, char* argv[]) {
 
                 if (batch_index % 1000 == 0) {
                     auto save_path = get_model_save_path();
-                    torch::save(model, save_path);
+                    torch::save(facenet, save_path);
                     std::cout << "Checkpoint saved to: " << save_path << std::endl;
                 }
             }
@@ -287,8 +278,36 @@ int main(int argc, char* argv[]) {
             std::cout << "Zero-loss count: " << zero_loss_counter << std::endl;
             std::cout << "NaN-loss count: " << nan_loss_counter << std::endl;
 
-            if (avg_loss < best_avg_loss) {
-                best_avg_loss = avg_loss;
+            // Validation pass (no grad)
+            double val_loss = 0.0;
+            int val_batches = 0;
+            {
+                torch::NoGradGuard no_grad;
+                facenet->eval();
+                size_t processed = 0;
+                while (processed < val_indices.size()) {
+                    size_t chunk = std::min((size_t)batch_size, val_indices.size() - processed);
+                    std::vector<torch::Tensor> v_images, v_labels;
+                    for (size_t i = processed; i < processed + chunk; ++i) {
+                        auto ex = raw_dataset.get(val_indices[i]);
+                        v_images.push_back(ex.data);
+                        v_labels.push_back(ex.target);
+                    }
+                    if (v_images.empty()) break;
+                    auto v_inputs = torch::stack(v_images).to(device);
+                    auto v_labels_t = torch::stack(v_labels).to(device);
+                    auto v_metrics = facenet->forward(v_inputs, v_labels_t);
+                    val_loss += v_metrics.loss.item<double>();
+                    val_batches++;
+                    processed += chunk;
+                }
+                facenet->train();
+            }
+            double avg_val_loss = val_batches > 0 ? val_loss / val_batches : 0.0;
+            std::cout << "Avg Validation Loss: " << avg_val_loss << std::endl;
+
+            if (avg_val_loss < best_avg_loss) {
+                best_avg_loss = avg_val_loss;
                 no_improve_epochs = 0;
             } else {
                 no_improve_epochs++;
@@ -299,18 +318,17 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            scheduler_model.step();
-            scheduler_arcface.step();
+            scheduler_facenet.step();
             
             auto save_path = get_model_save_path();
-            torch::save(model, save_path);
+            torch::save(facenet, save_path);
             std::cout << "Model saved to: " << save_path << std::endl;
             
             if (epoch % 10 == 0) {
                 std::string epoch_filename = "model_epoch_" + std::to_string(epoch) + ".pt";
                 auto epoch_save_path = get_repo_root() / "models" / epoch_filename;
                 
-                torch::save(model, epoch_save_path.string());
+                torch::save(facenet, epoch_save_path.string());
                 std::cout << "Epoch checkpoint saved to: " << epoch_save_path << std::endl;
             }
             
