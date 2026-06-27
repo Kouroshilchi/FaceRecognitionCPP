@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
             : (repo_root / "data" / "data_casia").string();
 
         const int P = 16;            
-        const int K = 16;               
+        const int K = 12;               
         const int64_t batch_size   = P * K;       
         const int64_t embedding_dim = 256;
         const double  dropout       = 0.1;
@@ -124,22 +124,18 @@ int main(int argc, char* argv[]) {
         std::cout << "Total batches per epoch: " << total_batches << std::endl;
 
         // Use FaceNet wrapper (backbone + ArcFace head)
-        auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 64.0, 0.5);
+        auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 30.0, 0.5);
         facenet->to(device);
         facenet->train();
 
         // Use separate learning rates for the backbone model and ArcFace head
         const double model_lr = 1e-3;
-        const double arcface_lr = 1e-5;
 
         std::vector<torch::Tensor> facenet_params;
         for (auto &p : facenet->parameters()) facenet_params.push_back(p);
 
         torch::optim::Adam optimizer_facenet(facenet_params, torch::optim::AdamOptions(model_lr));
         auto scheduler_facenet = torch::optim::StepLR(optimizer_facenet, 5, 0.5);
-
-        std::cout << "Optimizer config: model_lr=" << model_lr
-                  << ", arcface_lr=" << arcface_lr << std::endl;
 
         std::mt19937 rng(42);
 
