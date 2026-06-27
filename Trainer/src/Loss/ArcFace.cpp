@@ -42,8 +42,15 @@ LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
     auto theta = torch::acos(cos_theta);
     auto cos_theta_m = torch::cos(theta + m_);
 
-    auto output = (one_hot * (cos_theta_m - cos_theta) + cos_theta) * s_;
+    const double threshold = std::cos(M_PI - m_);
+    const double mm = std::sin(M_PI - m_) * m_;
+    auto cos_theta_m_safe = torch::where(
+        cos_theta > threshold,
+        cos_theta_m,
+        cos_theta - mm
+    );
 
+    auto output = (one_hot * (cos_theta_m_safe - cos_theta) + cos_theta) * s_;
     auto loss = torch::nn::functional::cross_entropy(output, labels);
 
     double avg_pos_metric = 0.0;

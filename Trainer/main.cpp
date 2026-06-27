@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
         facenet->train();
 
         // Use separate learning rates for the backbone model and ArcFace head
-        const double model_lr = 1e-3;
+        const double model_lr = 1e-4;
 
         std::vector<torch::Tensor> facenet_params;
         for (auto &p : facenet->parameters()) facenet_params.push_back(p);
@@ -224,7 +224,7 @@ int main(int argc, char* argv[]) {
 
                 loss.backward();
                 
-                // torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
+                torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
 
                 optimizer_facenet.step();
 
@@ -238,7 +238,7 @@ int main(int argc, char* argv[]) {
                 
                 ++batch_index;
 
-                if (batch_index % 100 == 0) {
+                if (batch_index % 10 == 0) {
                     double margin_gap = metrics.avg_neg_metric - metrics.avg_pos_metric;
                     
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
