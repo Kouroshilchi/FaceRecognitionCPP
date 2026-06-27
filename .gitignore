@@ -39,3 +39,4 @@ logs/
 *.cache
 __pycache__/
 *.pyc
+*.zip
