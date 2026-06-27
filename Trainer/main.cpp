@@ -126,13 +126,17 @@ int main(int argc, char* argv[]) {
         model->to(device);
         model->train();
 
-        torch::optim::Adam optimizer(model->parameters(), 
-                                    torch::optim::AdamOptions(1e-4)); 
-        auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
+        // Initialize ArcFace loss module (replaces TripletLoss)
+        auto arcface = Loss::ArcFace(num_classes, embedding_dim, 30.0, 0.5);
+        arcface->to(device);
 
-        const double margin = 0.3;  
-        auto triplet_loss = Loss::TripletLoss(margin);
-        triplet_loss->to(device);
+        // Combine model + arcface parameters into a single optimizer
+        std::vector<torch::Tensor> all_params;
+        for (auto &p : model->parameters()) all_params.push_back(p);
+        for (auto &p : arcface->parameters()) all_params.push_back(p);
+
+        torch::optim::Adam optimizer(all_params, torch::optim::AdamOptions(1e-4));
+        auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
         std::mt19937 rng(42);
 
@@ -203,7 +207,7 @@ int main(int argc, char* argv[]) {
                     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
                 );
 
-                auto metrics = triplet_loss->forward_batch_hard(embeddings, labels);
+                auto metrics = arcface->forward(embeddings, labels);
                 auto loss = metrics.loss;
 
                 double loss_value = loss.item<double>();
@@ -235,7 +239,7 @@ int main(int argc, char* argv[]) {
                 
                 ++batch_index;
 
-                if (batch_index % 10 == 0) {
+                if (batch_index % 100 == 0) {
                     double margin_gap = metrics.avg_neg_metric - metrics.avg_pos_metric;
                     
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
