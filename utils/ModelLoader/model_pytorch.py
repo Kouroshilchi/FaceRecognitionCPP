@@ -80,9 +80,9 @@ class FaceRecognitionBackBone(nn.Module):
 
 
 class FaceRecognitionProjector(nn.Module):
-    def __init__(self, in_channel=3, out_dim=128, dropout=0.1):
+    def __init__(self, in_channel=128, out_dim=128, dropout=0.1):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3 , bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -95,7 +95,7 @@ class FaceRecognitionProjector(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc1 = nn.Linear(512 * Bottleneck.expansion, out_dim)
-        self.bn_fc1 = nn.BatchNorm1d(out_dim)
+        self.bn1_fc1 = nn.BatchNorm1d(out_dim)
         self.dropout_layer = nn.Dropout(dropout)
 
     def _make_layer(self, planes, blocks, stride=1):
@@ -122,25 +122,26 @@ class FaceRecognitionProjector(nn.Module):
         x = torch.flatten(x, 1)
 
         x = self.fc1(x)
-        x = self.bn_fc1(x)
+        x = self.bn1_fc1(x)
         x = self.dropout_layer(x)
-
         return x
 
 
 class FaceRecognitionModel(nn.Module):
     def __init__(self, num_channel=3, out_dim=128, dropout=0.1):
         super().__init__()
+        # self.backbone = FaceRecognitionBackBone(num_channel, 128, dropout)
         self.projector = FaceRecognitionProjector(num_channel, out_dim, dropout)
 
     def forward(self, x):
+        # x = self.backbone(x)
         x = self.projector(x)
         return x
 
 
 def load_model(weights_path: str, device=None) -> FaceRecognitionModel:
-    model = FaceRecognitionModel(num_channel=3, out_dim=128, dropout=0.1)
-    state_dict = torch.load(weights_path, map_location=device)
+    model = FaceRecognitionModel(num_channel=3, out_dim=256, dropout=0.1)
+    state_dict = torch.load(weights_path, map_location=device , weights_only=False)
     if isinstance(state_dict, dict) and "state_dict" in state_dict and len(state_dict) > 1:
         state_dict = state_dict["state_dict"]
     model.load_state_dict(state_dict)

@@ -1,13 +1,13 @@
 #include <torch/torch.h>
 #include <iostream>
 #include <filesystem>
-#include "../Trainer/include/Model/Model.h"
+#include "Model/Model.h"
 #include <torch/csrc/jit/serialization/pickle.h>
 #include <fstream>
 
 int main() {
     try {
-        const int64_t embedding_dim = 128;
+        const int64_t embedding_dim = 256;
         const double dropout = 0.1;
 
         std::cout << "Loading model..." << std::endl;
