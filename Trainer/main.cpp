@@ -8,6 +8,7 @@
 #include "include/Dataset/Dataset.h"
 #include "include/Loss/TripletLoss.h"
 #include "include/Loss/ArcFace.h"
+#include "include/Utils/AccuracyLFW.h"
 #include <random>
 #include <map>
 #include <cstdlib>
@@ -89,7 +90,9 @@ int main(int argc, char* argv[]) {
         const std::string dataset_root = (argc > 1)
             ? argv[1]
             : (repo_root / "data" / "data_casia").string();
-
+        std::string dataset_valid_root = (argc > 2)
+            ? argv[2]
+            : (repo_root / "data" / "data_LFW").string();
         // const int P = 12;            
         // const int K = 8;               
         // const int64_t batch_size   = P * K; 
@@ -109,15 +112,21 @@ int main(int argc, char* argv[]) {
         const int64_t num_classes  = raw_dataset.num_classes();
         const size_t  dataset_size = raw_dataset.size().value();
         int64_t total_batches = (dataset_size + batch_size - 1) / batch_size; 
-        std::cout << "Classes found: " << num_classes << std::endl;
-        std::cout << "Dataset size:  " << dataset_size << std::endl;
-        std::cout << "Batch configuration: " << batch_size<< std::endl;
+        // std::cout << "Classes found: " << num_classes << std::endl;
+        // std::cout << "Dataset size:  " << dataset_size << std::endl;
+        // std::cout << "Batch configuration: " << batch_size<< std::endl;
 
-        if (num_classes < 2) {
-            throw std::runtime_error("Dataset must have at least 2 classes");
-        }
+        auto raw_dataset_valid = dataset::FaceDataset(dataset_valid_root, image_size);
+        const size_t valid_dataset_size = raw_dataset_valid.size().value();
+        const int64_t num_classes = raw_dataset_valid.num_classes();
+        
         auto dataloader = torch::data::make_data_loader(
             std::move(raw_dataset) , 
+            torch::data::DataLoaderOptions().batch_size(batch_size)
+        );
+
+        auto dataloader_valid = torch::data::make_data_loader(
+            std::move(raw_dataset_valid) , 
             torch::data::DataLoaderOptions().batch_size(batch_size)
         );
 
@@ -202,7 +211,7 @@ int main(int argc, char* argv[]) {
                               << " | Neg-dist: " << metrics.avg_neg_metric
                               << " | Gap(N-P): " << margin_gap  
                             //   << " | Valid-triplets: " << metrics.num_valid_triplets
-                              << " | Zero-triplets: " << metrics.num_zero_loss_triplets << "/" << metrics.num_valid_triplets
+                            //   << " | Zero-triplets: " << metrics.num_zero_loss_triplets << "/" << metrics.num_valid_triplets
                               << std::endl;
                 }
 
@@ -246,6 +255,17 @@ int main(int argc, char* argv[]) {
         }
 
         std::cout << "Training complete." << std::endl;
+
+        std::cout << "Evaluating LFW accuracy..." << std::endl;
+        Utils::AccuracyLFW lfw_eval(
+            repo_root / "data" / "data_LFW",
+            repo_root / "data" / "data_LFW" / "pairs.csv",
+            facenet,
+            device);
+        auto lfw_metrics = lfw_eval.Evaluate(0.7, 16, 200);
+        std::cout << "LFW accuracy: " << (lfw_metrics.accuracy * 100.0) << "%"
+                  << " | Best threshold: " << lfw_metrics.best_threshold << std::endl;
+
         return 0;
 
     } catch (const std::exception& ex) {
