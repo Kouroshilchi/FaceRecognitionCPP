@@ -127,16 +127,26 @@ int main(int argc, char* argv[]) {
         model->train();
 
         // Initialize ArcFace loss module (replaces TripletLoss)
-        auto arcface = Loss::ArcFace(num_classes, embedding_dim, 30.0, 0.5);
+        auto arcface = Loss::ArcFace(num_classes, embedding_dim, 64.0, 0.5);
         arcface->to(device);
 
-        // Combine model + arcface parameters into a single optimizer
-        std::vector<torch::Tensor> all_params;
-        for (auto &p : model->parameters()) all_params.push_back(p);
-        for (auto &p : arcface->parameters()) all_params.push_back(p);
+        // Use separate learning rates for the backbone model and ArcFace head
+        const double model_lr = 1e-3;
+        const double arcface_lr = 1e-5;
 
-        torch::optim::Adam optimizer(all_params, torch::optim::AdamOptions(1e-4));
-        auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
+        std::vector<torch::Tensor> model_params;
+        for (auto &p : model->parameters()) model_params.push_back(p);
+
+        std::vector<torch::Tensor> arcface_params;
+        for (auto &p : arcface->parameters()) arcface_params.push_back(p);
+
+        torch::optim::Adam optimizer_model(model_params, torch::optim::AdamOptions(model_lr));
+        torch::optim::Adam optimizer_arcface(arcface_params, torch::optim::AdamOptions(arcface_lr));
+        auto scheduler_model = torch::optim::StepLR(optimizer_model, 5, 0.5);
+        auto scheduler_arcface = torch::optim::StepLR(optimizer_arcface, 5, 0.5);
+
+        std::cout << "Optimizer config: model_lr=" << model_lr
+                  << ", arcface_lr=" << arcface_lr << std::endl;
 
         std::mt19937 rng(42);
 
@@ -198,7 +208,8 @@ int main(int argc, char* argv[]) {
                 auto inputs = torch::stack(images).to(device);
                 auto labels = torch::stack(labels_vec).to(device);
 
-                optimizer.zero_grad();
+                optimizer_model.zero_grad();
+                optimizer_arcface.zero_grad();
                 
                 auto embeddings = model->forward(inputs);
 
@@ -227,7 +238,8 @@ int main(int argc, char* argv[]) {
                 
                 // torch::nn::utils::clip_grad_norm_(model->parameters(), 5.0);  
                 
-                optimizer.step();
+                optimizer_model.step();
+                optimizer_arcface.step();
 
                 epoch_loss += loss_value;
                 avg_pos_metric_sum += metrics.avg_pos_metric;
@@ -287,7 +299,8 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            scheduler.step();
+            scheduler_model.step();
+            scheduler_arcface.step();
             
             auto save_path = get_model_save_path();
             torch::save(model, save_path);
