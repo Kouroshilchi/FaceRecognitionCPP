@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
                                     torch::optim::AdamOptions(1e-4)); 
         auto scheduler = torch::optim::StepLR(optimizer, 5, 0.5);
 
-        const double margin = 0.5;  
+        const double margin = 0.3;  
         auto triplet_loss = Loss::TripletLoss(margin);
         triplet_loss->to(device);
 
@@ -203,7 +203,7 @@ int main(int argc, char* argv[]) {
                     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
                 );
 
-                auto metrics = triplet_loss->forward(embeddings, labels);
+                auto metrics = triplet_loss->forward_batch_hard(embeddings, labels);
                 auto loss = metrics.loss;
 
                 double loss_value = loss.item<double>();
@@ -243,10 +243,9 @@ int main(int argc, char* argv[]) {
                               << "Loss: " << loss_value
                               << " | Pos-dist: " << metrics.avg_pos_metric
                               << " | Neg-dist: " << metrics.avg_neg_metric
-                              << " | Gap(N-P): " << margin_gap  // ✓ جدید
-                              << " | Valid-triplets: " << metrics.num_valid_triplets
+                              << " | Gap(N-P): " << margin_gap  
+                            //   << " | Valid-triplets: " << metrics.num_valid_triplets
                               << " | Zero-triplets: " << metrics.num_zero_loss_triplets << "/" << metrics.num_valid_triplets
-                              << " | Emb-norm: " << embeddings.norm(2, 1).mean().item<double>()
                               << std::endl;
                 }
 
