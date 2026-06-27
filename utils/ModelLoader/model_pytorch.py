@@ -80,9 +80,9 @@ class FaceRecognitionBackBone(nn.Module):
 
 
 class FaceRecognitionProjector(nn.Module):
-    def __init__(self, in_channel=128, out_dim=128, dropout=0.1):
+    def __init__(self, in_channel=3, out_dim=256, dropout=0.1):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3 , bias=False)
+        self.conv1 = nn.Conv2d(in_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -128,26 +128,55 @@ class FaceRecognitionProjector(nn.Module):
 
 
 class FaceRecognitionModel(nn.Module):
-    def __init__(self, num_channel=3, out_dim=128, dropout=0.1):
+    def __init__(self, num_channel=3, out_dim=256, dropout=0.1):
         super().__init__()
-        # self.backbone = FaceRecognitionBackBone(num_channel, 128, dropout)
         self.projector = FaceRecognitionProjector(num_channel, out_dim, dropout)
 
     def forward(self, x):
-        # x = self.backbone(x)
-        x = self.projector(x)
-        return x
+        return self.projector(x)
+
+
+def _normalize_state_dict(state_dict):
+    if isinstance(state_dict, dict):
+        if "state_dict" in state_dict and isinstance(state_dict["state_dict"], dict):
+            state_dict = state_dict["state_dict"]
+        elif "model_state_dict" in state_dict and isinstance(state_dict["model_state_dict"], dict):
+            state_dict = state_dict["model_state_dict"]
+
+    if isinstance(state_dict, dict):
+        normalized = {}
+        for key, value in state_dict.items():
+            print(key)
+            if key.startswith("backbone."):
+                key = key [len("backbone."):]
+            normalized[key] = value
+        return normalized
+
+    raise TypeError(f"Unsupported state_dict format: {type(state_dict)!r}")
 
 
 def load_model(weights_path: str, device=None) -> FaceRecognitionModel:
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     model = FaceRecognitionModel(num_channel=3, out_dim=256, dropout=0.1)
-    state_dict = torch.load(weights_path, map_location=device , weights_only=False)
-    if isinstance(state_dict, dict) and "state_dict" in state_dict and len(state_dict) > 1:
-        state_dict = state_dict["state_dict"]
-    model.load_state_dict(state_dict)
     model.to(device)
+
+    state_dict = torch.load(weights_path, map_location=device, weights_only=False)
+    state_dict = _normalize_state_dict(state_dict)
+
+    incompatible = model.load_state_dict(state_dict, strict=False)
+    if incompatible.missing_keys or incompatible.unexpected_keys:
+        print("Missing keys:", incompatible.missing_keys)
+        print("Unexpected keys:", incompatible.unexpected_keys)
+
     model.eval()
     print(f"Model loaded from '{weights_path}' on {device}")
     return model
 
+if __name__ == "__main__":
+    model = load_model(r"C:\Users\kuoro\Documents\GitHub\FaceRecognitionCPP\models\model_weights.pt")
+    dummy_input = torch.randn(1, 3, 112, 112).to('cuda')
+    output = model(dummy_input)
+    print("Output shape:", output.shape)
 
