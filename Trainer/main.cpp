@@ -39,8 +39,7 @@ std::string get_weights_path() {
 std::vector<size_t> make_balanced_batch(
     const std::vector<std::pair<std::string, int64_t>>& samples,
     int P, int K,
-    std::mt19937& rng,
-    int min_samples_per_class = 4)  
+    std::mt19937& rng)  
 {
     std::map<int64_t, std::vector<size_t>> label_to_indices;
     for (size_t i = 0; i < samples.size(); ++i)
@@ -91,9 +90,10 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : (repo_root / "data" / "data_casia").string();
 
-        const int P = 16;            
-        const int K = 12;               
-        const int64_t batch_size   = P * K;       
+        // const int P = 12;            
+        // const int K = 8;               
+        // const int64_t batch_size   = P * K; 
+        const int64_t batch_size = 256;      
         const int64_t embedding_dim = 256;
         const double  dropout       = 0.1;
         const int64_t epochs        = 100;
@@ -108,27 +108,23 @@ int main(int argc, char* argv[]) {
         auto raw_dataset = dataset::FaceDataset(dataset_root, image_size);
         const int64_t num_classes  = raw_dataset.num_classes();
         const size_t  dataset_size = raw_dataset.size().value();
-
+        int64_t total_batches = (dataset_size + batch_size - 1) / batch_size; 
         std::cout << "Classes found: " << num_classes << std::endl;
         std::cout << "Dataset size:  " << dataset_size << std::endl;
-        std::cout << "Batch configuration: P=" << P << ", K=" << K 
-                  << ", Batch size=" << batch_size << std::endl;
+        std::cout << "Batch configuration: " << batch_size<< std::endl;
 
         if (num_classes < 2) {
             throw std::runtime_error("Dataset must have at least 2 classes");
         }
+        auto dataloader = torch::data::make_data_loader(
+            std::move(raw_dataset) , 
+            torch::data::DataLoaderOptions().batch_size(batch_size)
+        );
 
-        const auto& all_samples = raw_dataset.samples();
-
-        const size_t total_batches = dataset_size / batch_size;
-        std::cout << "Total batches per epoch: " << total_batches << std::endl;
-
-        // Use FaceNet wrapper (backbone + ArcFace head)
         auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 30.0, 0.5);
         facenet->to(device);
         facenet->train();
 
-        // Use separate learning rates for the backbone model and ArcFace head
         const double model_lr = 1e-4;
 
         std::vector<torch::Tensor> facenet_params;
@@ -139,17 +135,6 @@ int main(int argc, char* argv[]) {
 
         std::mt19937 rng(42);
 
-        // Prepare validation indices (10% of data)
-        size_t val_size = std::max<size_t>(1, dataset_size / 10);
-        std::vector<size_t> all_idx(dataset_size);
-        for (size_t i = 0; i < dataset_size; ++i) all_idx[i] = i;
-        std::shuffle(all_idx.begin(), all_idx.end(), rng);
-        std::vector<size_t> val_indices(all_idx.begin(), all_idx.begin() + val_size);
-
-        double best_avg_loss = std::numeric_limits<double>::infinity();
-        int no_improve_epochs = 0;
-        const int patience = 10; 
-
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             facenet->train();
             double   epoch_loss  = 0.0;
@@ -158,51 +143,20 @@ int main(int argc, char* argv[]) {
             double   avg_pos_metric_sum = 0.0;
             double   avg_neg_metric_sum = 0.0;
             int64_t  hard_triplets_count = 0;
+            for (auto& batch: *dataloader)
+            {
+                std::vector<torch::Tensor> batch_images;
+                std::vector<torch::Tensor> batch_labels;
+                batch_images.reserve(batch.size());
+                batch_labels.reserve(batch.size());
 
-            for (size_t b = 0; b < total_batches; ++b) {
-                std::vector<size_t> indices;
-                try {
-                    indices = make_balanced_batch(all_samples, P, K, rng, K);
-                } catch (const std::exception& e) {
-                    std::cerr << "Error generating batch: " << e.what() << std::endl;
-                    skip_count++;
-                    continue;
+                for (auto& sample : batch) {
+                    batch_images.push_back(sample.data);
+                    batch_labels.push_back(sample.target.to(torch::kInt64).squeeze());
                 }
 
-                if (indices.empty()) {
-                    std::cerr << "Warning: Empty batch generated, skipping..." << std::endl;
-                    skip_count++;
-                    continue;
-                }
-
-                if (indices.size() < batch_size / 2) {
-                    std::cerr << "Warning: Batch too small (" << indices.size() 
-                              << "), skipping..." << std::endl;
-                    skip_count++;
-                    continue;
-                }
-
-                std::vector<torch::Tensor> images, labels_vec;
-                try {
-                    for (size_t idx : indices) {
-                        auto ex = raw_dataset.get(idx);
-                        images.push_back(ex.data);
-                        labels_vec.push_back(ex.target);
-                    }
-                } catch (const std::exception& e) {
-                    std::cerr << "Error loading batch data: " << e.what() << std::endl;
-                    skip_count++;
-                    continue;
-                }
-
-                if (images.empty() || labels_vec.empty()) {
-                    std::cerr << "Warning: No valid data in batch, skipping..." << std::endl;
-                    skip_count++;
-                    continue;
-                }
-
-                auto inputs = torch::stack(images).to(device);
-                auto labels = torch::stack(labels_vec).to(device);
+                auto inputs = torch::stack(batch_images).to(device);
+                auto labels = torch::stack(batch_labels).to(device);
 
                 optimizer_facenet.zero_grad();
 
@@ -243,7 +197,7 @@ int main(int argc, char* argv[]) {
                     
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
-                              << "Loss: " << loss_value
+                              << "Loss: " << loss_value 
                               << " | Pos-dist: " << metrics.avg_pos_metric
                               << " | Neg-dist: " << metrics.avg_neg_metric
                               << " | Gap(N-P): " << margin_gap  
@@ -273,46 +227,6 @@ int main(int argc, char* argv[]) {
             std::cout << "Hard triplets batches: " << hard_triplets_count << std::endl;
             std::cout << "Zero-loss count: " << zero_loss_counter << std::endl;
             std::cout << "NaN-loss count: " << nan_loss_counter << std::endl;
-
-            // Validation pass (no grad)
-            double val_loss = 0.0;
-            int val_batches = 0;
-            {
-                torch::NoGradGuard no_grad;
-                facenet->eval();
-                size_t processed = 0;
-                while (processed < val_indices.size()) {
-                    size_t chunk = std::min((size_t)batch_size, val_indices.size() - processed);
-                    std::vector<torch::Tensor> v_images, v_labels;
-                    for (size_t i = processed; i < processed + chunk; ++i) {
-                        auto ex = raw_dataset.get(val_indices[i]);
-                        v_images.push_back(ex.data);
-                        v_labels.push_back(ex.target);
-                    }
-                    if (v_images.empty()) break;
-                    auto v_inputs = torch::stack(v_images).to(device);
-                    auto v_labels_t = torch::stack(v_labels).to(device);
-                    auto v_metrics = facenet->forward(v_inputs, v_labels_t);
-                    val_loss += v_metrics.loss.item<double>();
-                    val_batches++;
-                    processed += chunk;
-                }
-                facenet->train();
-            }
-            double avg_val_loss = val_batches > 0 ? val_loss / val_batches : 0.0;
-            std::cout << "Avg Validation Loss: " << avg_val_loss << std::endl;
-
-            if (avg_val_loss < best_avg_loss) {
-                best_avg_loss = avg_val_loss;
-                no_improve_epochs = 0;
-            } else {
-                no_improve_epochs++;
-                if (no_improve_epochs >= patience) {
-                    std::cout << "No improvement for " << patience 
-                              << " epochs. Stopping early." << std::endl;
-                    break;
-                }
-            }
 
             scheduler_facenet.step();
             
