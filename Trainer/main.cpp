@@ -202,10 +202,10 @@ int main(int argc, char* argv[]) {
                 
                 auto embeddings = model->forward(inputs);
 
-                embeddings = torch::nn::functional::normalize(
-                    embeddings,
-                    torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
-                );
+                // embeddings = torch::nn::functional::normalize(
+                //     embeddings,
+                //     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
+                // );
 
                 auto metrics = arcface->forward(embeddings, labels);
                 auto loss = metrics.loss;
