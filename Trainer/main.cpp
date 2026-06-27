@@ -90,12 +90,12 @@ int main(int argc, char* argv[]) {
             ? argv[1]
             : (repo_root / "data" / "data_casia").string();
 
-        const int P = 20;            
-        const int K = 10;               
+        const int P = 16;            
+        const int K = 16;               
         const int64_t batch_size   = P * K;       
-        const int64_t embedding_dim = 128;
+        const int64_t embedding_dim = 256;
         const double  dropout       = 0.1;
-        const int64_t epochs        = 10;
+        const int64_t epochs        = 100;
         const cv::Size image_size{112, 112};
         int64_t zero_loss_counter   = 0;
         int64_t nan_loss_counter    = 0;
@@ -138,7 +138,7 @@ int main(int argc, char* argv[]) {
 
         double best_avg_loss = std::numeric_limits<double>::infinity();
         int no_improve_epochs = 0;
-        const int patience = 3; 
+        const int patience = 10; 
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             model->train();
@@ -221,7 +221,7 @@ int main(int argc, char* argv[]) {
 
                 loss.backward();
                 
-                torch::nn::utils::clip_grad_norm_(model->parameters(), 5.0);  
+                // torch::nn::utils::clip_grad_norm_(model->parameters(), 5.0);  
                 
                 optimizer.step();
 
