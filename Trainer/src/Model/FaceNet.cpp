@@ -9,7 +9,7 @@ FaceNetImpl::FaceNetImpl(int64_t num_classes,
                          double scale,
                          double margin) {
     backbone = register_module("backbone", FaceRecognitionModel(3, embedding_dim, dropout));
-    arcface = register_module("arcface", Loss::ArcFace(num_classes, embedding_dim, scale, margin));
+    arcface  = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
 }
 
 Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs, const torch::Tensor& labels) {
@@ -19,8 +19,14 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs, const torch:
 
 torch::Tensor FaceNetImpl::embed(const torch::Tensor& inputs) {
     torch::NoGradGuard no_grad;
-    backbone->eval();
+
+    this->eval();
+
     auto emb = backbone->forward(inputs);
+
+    auto norms = emb.norm(2, /*dim=*/1, /*keepdim=*/true).clamp_min(1e-12);
+    emb = emb / norms;
+
     return emb;
 }
 
