@@ -19,30 +19,38 @@ std::string pad_number(int value) {
     return stream.str();
 }
 
+std::string trim(const std::string& value) {
+    const auto begin = value.find_first_not_of(" \t\r\n");
+    if (begin == std::string::npos) return "";
+    const auto end = value.find_last_not_of(" \t\r\n");
+    return value.substr(begin, end - begin + 1);
+}
+
 } // namespace
 
 namespace Utils {
 namespace {
 
 std::filesystem::path find_lfw_root(const std::filesystem::path& data_dir) {
-    std::filesystem::path root = data_dir / "lfw-deepfunneled";
-    if (std::filesystem::exists(root)) {
-        std::filesystem::path nested = root / "lfw-deepfunneled";
-        if (std::filesystem::exists(nested) && std::filesystem::is_directory(nested)) {
-            return nested;
-        }
-        return root;
+    {
+        auto p = data_dir / "lfw-deepfunneled" / "lfw-deepfunneled";
+        if (std::filesystem::exists(p) && std::filesystem::is_directory(p)) return p;
     }
-    throw std::runtime_error("Could not find lfw-deepfunneled under " + data_dir.string());
+    {
+        auto p = data_dir / "lfw-deepfunneled";
+        if (std::filesystem::exists(p) && std::filesystem::is_directory(p)) return p;
+    }
+    if (std::filesystem::exists(data_dir) && std::filesystem::is_directory(data_dir)) {
+        return data_dir;
+    }
+    throw std::runtime_error("Could not find LFW image root under: " + data_dir.string());
 }
 
 std::vector<std::string> split_csv_line(const std::string& line) {
     std::vector<std::string> fields;
     std::stringstream stream(line);
     std::string item;
-    while (std::getline(stream, item, ',')) {
-        fields.push_back(item);
-    }
+    while (std::getline(stream, item, ',')) fields.push_back(item);
     return fields;
 }
 
@@ -55,70 +63,135 @@ AccuracyLFW::AccuracyLFW(const std::filesystem::path& lfw_root,
     : lfw_root_(lfw_root), pairs_file_(pairs_file), model_(model), device_(device) {}
 
 std::filesystem::path AccuracyLFW::resolve_lfw_root() const {
-    if (!lfw_root_.empty()) {
-        return lfw_root_;
+    if (!lfw_root_.empty() && std::filesystem::exists(lfw_root_)) {
+        return find_lfw_root(lfw_root_);
     }
     return find_lfw_root(std::filesystem::path("data") / "data_LFW");
 }
 
-std::vector<std::tuple<std::filesystem::path, std::filesystem::path, int>> AccuracyLFW::read_pairs() const {
+std::vector<std::tuple<std::filesystem::path, std::filesystem::path, int>>
+AccuracyLFW::read_pairs() const {
     std::filesystem::path pairs_path = pairs_file_;
-    if (pairs_path.empty()) {
-        const auto root = resolve_lfw_root();
-        if (std::filesystem::exists(root / "pairs.csv")) {
-            pairs_path = root / "pairs.csv";
-        } else if (std::filesystem::exists(root.parent_path() / "pairs.csv")) {
-            pairs_path = root.parent_path() / "pairs.csv";
-        } else if (std::filesystem::exists(root.parent_path().parent_path() / "pairs.csv")) {
-            pairs_path = root.parent_path().parent_path() / "pairs.csv";
+
+    if (pairs_path.empty() || !std::filesystem::exists(pairs_path)) {
+        std::vector<std::filesystem::path> candidates;
+        auto root = lfw_root_;
+        candidates.push_back(root / "pairs.csv");
+        candidates.push_back(root.parent_path() / "pairs.csv");
+        candidates.push_back(root.parent_path().parent_path() / "pairs.csv");
+        candidates.push_back(root / "pairs.txt");
+        candidates.push_back(root.parent_path() / "pairs.txt");
+
+        for (auto& c : candidates) {
+            if (std::filesystem::exists(c)) { pairs_path = c; break; }
         }
     }
 
     if (!std::filesystem::exists(pairs_path)) {
-        throw std::runtime_error("Pairs file not found: " + pairs_path.string());
+        throw std::runtime_error("Pairs file not found. Tried: " + pairs_file_.string() +
+                                 " and nearby locations.");
     }
 
+    std::cout << "[LFW] Using pairs file: " << pairs_path << std::endl;
+
+    auto img_root = resolve_lfw_root();
+    std::cout << "[LFW] Using image root: " << img_root << std::endl;
+
     std::ifstream input(pairs_path);
-    if (!input.is_open()) {
+    if (!input.is_open())
         throw std::runtime_error("Unable to open pairs file: " + pairs_path.string());
-    }
 
     std::vector<std::tuple<std::filesystem::path, std::filesystem::path, int>> pairs;
     std::string line;
-    std::getline(input, line);
+    int line_number = 1;
+
+    bool is_csv = (pairs_path.extension() == ".csv");
+    std::getline(input, line); // skip header
+
+    int skipped_lines   = 0;
+    int missing_files   = 0;
+
     while (std::getline(input, line)) {
-        if (line.empty()) {
-            continue;
+        ++line_number;
+        if (line.empty()) continue;
+
+        std::vector<std::string> fields;
+        if (is_csv) {
+            fields = split_csv_line(line);
+        } else {
+            std::stringstream ss(line);
+            std::string token;
+            while (std::getline(ss, token, '\t')) fields.push_back(token);
         }
-        auto fields = split_csv_line(line);
-        fields.erase(std::remove_if(fields.begin(), fields.end(), [](const std::string& value) {
-            return value.empty();
-        }), fields.end());
+
+        for (auto& f : fields) f = trim(f);
+        fields.erase(std::remove_if(fields.begin(), fields.end(),
+            [](const std::string& v){ return v.empty(); }), fields.end());
+
+        auto parse_int = [&](const std::string& value) {
+            try {
+                size_t pos = 0;
+                int result = std::stoi(value, &pos);
+                if (pos != value.size()) throw std::invalid_argument("trailing chars");
+                return result;
+            } catch (...) {
+                throw std::runtime_error("Invalid integer in pairs file at line " +
+                                         std::to_string(line_number) + ": '" + value + "'");
+            }
+        };
+
+        std::filesystem::path p1, p2;
+        int label = -1;
+
         if (fields.size() == 3) {
             const std::string& name = fields[0];
-            int num1 = std::stoi(fields[1]);
-            int num2 = std::stoi(fields[2]);
-            pairs.emplace_back(resolve_lfw_root() / name / (name + "_" + pad_number(num1) + ".jpg"),
-                               resolve_lfw_root() / name / (name + "_" + pad_number(num2) + ".jpg"),
-                               1);
+            int n1 = parse_int(fields[1]);
+            int n2 = parse_int(fields[2]);
+            p1 = img_root / name / (name + "_" + pad_number(n1) + ".jpg");
+            p2 = img_root / name / (name + "_" + pad_number(n2) + ".jpg");
+            label = 1;
         } else if (fields.size() == 4) {
             const std::string& name1 = fields[0];
-            int num1 = std::stoi(fields[1]);
+            int n1 = parse_int(fields[1]);
             const std::string& name2 = fields[2];
-            int num2 = std::stoi(fields[3]);
-            pairs.emplace_back(resolve_lfw_root() / name1 / (name1 + "_" + pad_number(num1) + ".jpg"),
-                               resolve_lfw_root() / name2 / (name2 + "_" + pad_number(num2) + ".jpg"),
-                               0);
+            int n2 = parse_int(fields[3]);
+            p1 = img_root / name1 / (name1 + "_" + pad_number(n1) + ".jpg");
+            p2 = img_root / name2 / (name2 + "_" + pad_number(n2) + ".jpg");
+            label = 0;
+        } else {
+            ++skipped_lines;
+            std::cerr << "[LFW] Skipping malformed line " << line_number
+                      << " (" << fields.size() << " fields): " << line << std::endl;
+            continue;
         }
+
+        bool p1_ok = std::filesystem::exists(p1);
+        bool p2_ok = std::filesystem::exists(p2);
+        if (!p1_ok || !p2_ok) {
+            ++missing_files;
+            if (missing_files <= 5) {  
+                if (!p1_ok) std::cerr << "[LFW] Missing image: " << p1 << std::endl;
+                if (!p2_ok) std::cerr << "[LFW] Missing image: " << p2 << std::endl;
+            }
+            continue;
+        }
+
+        pairs.emplace_back(p1, p2, label);
     }
+
+    if (skipped_lines > 0)
+        std::cerr << "[LFW] Total malformed lines skipped: " << skipped_lines << std::endl;
+    if (missing_files > 0)
+        std::cerr << "[LFW] Total pairs skipped due to missing files: " << missing_files << std::endl;
+
+    std::cout << "[LFW] Loaded " << pairs.size() << " valid pairs." << std::endl;
     return pairs;
 }
 
 torch::Tensor AccuracyLFW::load_image_tensor(const std::filesystem::path& image_path) const {
     cv::Mat image = cv::imread(image_path.string(), cv::IMREAD_COLOR);
-    if (image.empty()) {
+    if (image.empty())
         throw std::runtime_error("Unable to read image: " + image_path.string());
-    }
 
     cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
     cv::resize(image, image, cv::Size(112, 112));
@@ -128,188 +201,215 @@ torch::Tensor AccuracyLFW::load_image_tensor(const std::filesystem::path& image_
     tensor = tensor.permute({2, 0, 1}).clone();
 
     const std::vector<float> means = {0.485f, 0.456f, 0.406f};
-    const std::vector<float> stds = {0.229f, 0.224f, 0.225f};
-    for (int i = 0; i < 3; ++i) {
+    const std::vector<float> stds  = {0.229f, 0.224f, 0.225f};
+    for (int i = 0; i < 3; ++i)
         tensor[i] = (tensor[i] - means[i]) / stds[i];
-    }
+
     return tensor;
 }
 
-std::vector<std::pair<std::filesystem::path, torch::Tensor>> AccuracyLFW::build_embeddings(
-    const std::vector<std::filesystem::path>& image_paths,
-    int64_t batch_size) const {
-    std::vector<std::pair<std::filesystem::path, torch::Tensor>> embeddings;
+std::vector<std::pair<std::filesystem::path, torch::Tensor>>
+AccuracyLFW::build_embeddings(const std::vector<std::filesystem::path>& image_paths,
+                               int64_t batch_size) const {
     std::vector<std::filesystem::path> unique_paths;
-    for (const auto& path : image_paths) {
-        if (std::find(unique_paths.begin(), unique_paths.end(), path) == unique_paths.end()) {
-            unique_paths.push_back(path);
-        }
-    }
-
-    for (size_t start = 0; start < unique_paths.size(); start += batch_size) {
-        std::vector<std::filesystem::path> batch_paths;
-        for (size_t i = start; i < std::min<size_t>(start + batch_size, unique_paths.size()); ++i) {
-            batch_paths.push_back(unique_paths[i]);
-        }
-
-        std::vector<std::filesystem::path> existing_paths;
-        std::vector<torch::Tensor> tensors;
-        tensors.reserve(batch_paths.size());
-        for (const auto& path : batch_paths) {
-            if (std::filesystem::exists(path)) {
-                existing_paths.push_back(path);
-                tensors.push_back(load_image_tensor(path).unsqueeze(0).to(device_));
+    {
+        std::unordered_map<std::string, bool> seen;
+        for (const auto& p : image_paths) {
+            if (!seen.count(p.string())) {
+                seen[p.string()] = true;
+                unique_paths.push_back(p);
             }
         }
-        if (tensors.empty()) {
-            continue;
+    }
+
+    model_->eval();
+    torch::NoGradGuard no_grad;
+
+    std::vector<std::pair<std::filesystem::path, torch::Tensor>> embeddings;
+    embeddings.reserve(unique_paths.size());
+
+    for (size_t start = 0; start < unique_paths.size(); start += batch_size) {
+        std::vector<torch::Tensor>       tensors;
+        std::vector<std::filesystem::path> valid_paths;
+
+        for (size_t i = start;
+             i < std::min<size_t>(start + batch_size, unique_paths.size()); ++i) {
+            if (std::filesystem::exists(unique_paths[i])) {
+                try {
+                    tensors.push_back(load_image_tensor(unique_paths[i]).unsqueeze(0).to(device_));
+                    valid_paths.push_back(unique_paths[i]);
+                } catch (const std::exception& e) {
+                    std::cerr << "[LFW] Failed to load image: " << unique_paths[i]
+                              << " - " << e.what() << std::endl;
+                }
+            }
         }
 
-        torch::Tensor batch = torch::cat(tensors, 0);
-        torch::NoGradGuard no_grad;
-        model_->eval();
-        auto output = model_->embed(batch);
+        if (tensors.empty()) continue;
+
+        torch::Tensor batch  = torch::cat(tensors, 0);
+        torch::Tensor output = model_->embed(batch);
+
         auto norms = output.norm(2, 1, true).clamp_min(1e-12);
         output = output / norms;
-        auto cpu_output = output.cpu();
-        for (size_t i = 0; i < existing_paths.size(); ++i) {
-            embeddings.emplace_back(existing_paths[i], cpu_output[i].clone());
-        }
+
+        auto cpu_out = output.cpu();
+        for (size_t i = 0; i < valid_paths.size(); ++i)
+            embeddings.emplace_back(valid_paths[i], cpu_out[i].clone());
     }
+
+    model_->train();
+
     return embeddings;
 }
 
-std::pair<std::vector<double>, std::vector<int>> AccuracyLFW::compute_similarities_and_labels() const {
+std::pair<std::vector<double>, std::vector<int>>
+AccuracyLFW::compute_similarities_and_labels() const {
     auto pairs = read_pairs();
+    if (pairs.empty()) return {{}, {}};
+
     std::vector<std::filesystem::path> image_paths;
     image_paths.reserve(pairs.size() * 2);
-    for (const auto& [path1, path2, label] : pairs) {
-        image_paths.push_back(path1);
-        image_paths.push_back(path2);
+    for (const auto& [p1, p2, lbl] : pairs) {
+        image_paths.push_back(p1);
+        image_paths.push_back(p2);
     }
 
     auto embeddings = build_embeddings(image_paths, 16);
+
+    std::unordered_map<std::string, torch::Tensor> embedding_map;
+    for (const auto& [path, tensor] : embeddings)
+        embedding_map.emplace(path.string(), tensor);
+
     std::vector<double> similarities;
-    std::vector<int> labels;
+    std::vector<int>    labels;
     similarities.reserve(pairs.size());
     labels.reserve(pairs.size());
 
-    std::unordered_map<std::string, torch::Tensor> embedding_map;
-    for (const auto& [path, tensor] : embeddings) {
-        embedding_map.emplace(path.string(), tensor);
-    }
+    for (const auto& [p1, p2, lbl] : pairs) {
+        auto it1 = embedding_map.find(p1.string());
+        auto it2 = embedding_map.find(p2.string());
+        if (it1 == embedding_map.end() || it2 == embedding_map.end()) continue;
 
-    for (const auto& [path1, path2, label] : pairs) {
-        auto it1 = embedding_map.find(path1.string());
-        auto it2 = embedding_map.find(path2.string());
-        if (it1 == embedding_map.end() || it2 == embedding_map.end()) {
-            continue;
-        }
         double sim = static_cast<double>((it1->second * it2->second).sum().item<float>());
         similarities.push_back(sim);
-        labels.push_back(label);
+        labels.push_back(lbl);
     }
 
     return {similarities, labels};
 }
 
 double AccuracyLFW::accuracy_for_threshold(const std::vector<double>& similarities,
-                                           const std::vector<int>& labels,
-                                           double threshold) const {
-    if (similarities.empty() || labels.empty()) {
-        return 0.0;
-    }
+                                            const std::vector<int>&    labels,
+                                            double threshold) const {
+    if (similarities.empty()) return 0.0;
     int correct = 0;
     for (size_t i = 0; i < similarities.size(); ++i) {
-        bool pred = similarities[i] >= threshold;
-        bool label = labels[i] == 1;
-        if (pred == label) {
-            ++correct;
-        }
+        bool pred  = similarities[i] >= threshold;
+        bool truth = labels[i] == 1;
+        if (pred == truth) ++correct;
     }
     return static_cast<double>(correct) / static_cast<double>(similarities.size());
 }
 
 double AccuracyLFW::best_threshold_for(const std::vector<double>& similarities,
-                                       const std::vector<int>& labels,
-                                       int num_steps) const {
-    if (similarities.empty() || labels.empty()) {
-        return 0.0;
-    }
+                                        const std::vector<int>&    labels,
+                                        int num_steps) const {
+    if (similarities.empty()) return 0.0;
+
     double min_sim = *std::min_element(similarities.begin(), similarities.end());
     double max_sim = *std::max_element(similarities.begin(), similarities.end());
-    double best_acc = 0.0;
-    double best_thr = 0.0;
+
+    if (max_sim - min_sim < 1e-6) {
+        std::cerr << "[LFW] WARNING: similarities are nearly constant ("
+                  << min_sim << " ~ " << max_sim
+                  << "). Model may be in embedding collapse." << std::endl;
+        return 0.0;
+    }
+
+    double best_acc = -1.0;
+    double best_thr = min_sim;
+
     for (int step = 0; step <= num_steps; ++step) {
-        double threshold = min_sim + (max_sim - min_sim) * (static_cast<double>(step) / static_cast<double>(num_steps));
-        double acc = accuracy_for_threshold(similarities, labels, threshold);
+        double thr = min_sim + (max_sim - min_sim) *
+                     (static_cast<double>(step) / static_cast<double>(num_steps));
+        double acc = accuracy_for_threshold(similarities, labels, thr);
         if (acc > best_acc) {
             best_acc = acc;
-            best_thr = threshold;
+            best_thr = thr;
         }
     }
+
+    std::cout << "[LFW] Best accuracy=" << (best_acc * 100.0)
+              << "% at threshold=" << best_thr
+              << " (sim range: [" << min_sim << ", " << max_sim << "])" << std::endl;
+
     return best_thr;
 }
 
-AccuracyLFW::EvaluationMetrics AccuracyLFW::Evaluate(double threshold, int64_t batch_size, int num_steps) const {
+AccuracyLFW::EvaluationMetrics AccuracyLFW::Evaluate(double threshold,
+                                                       int64_t batch_size,
+                                                       int num_steps) const {
     auto pairs = read_pairs();
+
     std::vector<std::filesystem::path> image_paths;
     image_paths.reserve(pairs.size() * 2);
-    for (const auto& [path1, path2, label] : pairs) {
-        image_paths.push_back(path1);
-        image_paths.push_back(path2);
+    for (const auto& [p1, p2, lbl] : pairs) {
+        image_paths.push_back(p1);
+        image_paths.push_back(p2);
     }
 
     auto embeddings = build_embeddings(image_paths, batch_size);
+
+    std::unordered_map<std::string, torch::Tensor> embedding_map;
+    for (const auto& [path, tensor] : embeddings)
+        embedding_map.emplace(path.string(), tensor);
+
     std::vector<double> similarities;
-    std::vector<int> labels;
+    std::vector<int>    labels;
     similarities.reserve(pairs.size());
     labels.reserve(pairs.size());
 
-    std::unordered_map<std::string, torch::Tensor> embedding_map;
-    for (const auto& [path, tensor] : embeddings) {
-        embedding_map.emplace(path.string(), tensor);
-    }
-
     int64_t skipped = 0;
-    for (const auto& [path1, path2, label] : pairs) {
-        auto it1 = embedding_map.find(path1.string());
-        auto it2 = embedding_map.find(path2.string());
+    for (const auto& [p1, p2, lbl] : pairs) {
+        auto it1 = embedding_map.find(p1.string());
+        auto it2 = embedding_map.find(p2.string());
         if (it1 == embedding_map.end() || it2 == embedding_map.end()) {
             ++skipped;
             continue;
         }
         double sim = static_cast<double>((it1->second * it2->second).sum().item<float>());
         similarities.push_back(sim);
-        labels.push_back(label);
+        labels.push_back(lbl);
     }
 
     EvaluationMetrics metrics;
-    metrics.total_pairs = static_cast<int64_t>(labels.size());
+    metrics.total_pairs    = static_cast<int64_t>(labels.size());
     metrics.positive_pairs = static_cast<int64_t>(std::count(labels.begin(), labels.end(), 1));
     metrics.negative_pairs = static_cast<int64_t>(std::count(labels.begin(), labels.end(), 0));
-    metrics.skipped_pairs = skipped;
-    metrics.accuracy = accuracy_for_threshold(similarities, labels, threshold);
+    metrics.skipped_pairs  = skipped;
     metrics.best_threshold = best_threshold_for(similarities, labels, num_steps);
+
+    double eval_thr = (threshold != 0.0) ? threshold : metrics.best_threshold;
+    metrics.accuracy = accuracy_for_threshold(similarities, labels, eval_thr);
+
     return metrics;
 }
 
 double AccuracyLFW::ComputeAcc(double threshold) const {
-    auto [similarities, labels] = compute_similarities_and_labels();
-    return accuracy_for_threshold(similarities, labels, threshold);
+    auto [sims, labels] = compute_similarities_and_labels();
+    return accuracy_for_threshold(sims, labels, threshold);
 }
 
 double AccuracyLFW::BestThreshold(int num_steps) const {
-    auto [similarities, labels] = compute_similarities_and_labels();
-    return best_threshold_for(similarities, labels, num_steps);
+    auto [sims, labels] = compute_similarities_and_labels();
+    return best_threshold_for(sims, labels, num_steps);
 }
 
 double AccuracyLFW::ComputeDistence() const {
-    auto [similarities, labels] = compute_similarities_and_labels();
-    if (similarities.empty()) {
-        return 0.0;
-    }
-    return std::accumulate(similarities.begin(), similarities.end(), 0.0) / static_cast<double>(similarities.size());
+    auto [sims, labels] = compute_similarities_and_labels();
+    if (sims.empty()) return 0.0;
+    return std::accumulate(sims.begin(), sims.end(), 0.0) / static_cast<double>(sims.size());
 }
 
 } // namespace Utils
