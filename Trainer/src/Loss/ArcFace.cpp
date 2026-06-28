@@ -1,65 +1,148 @@
-#include "../include/Loss/ArcFace.h"
+#include "../include/Loss/TripletLoss.h"
 #include <iostream>
+#include <cmath>
 
-namespace Loss {
+namespace Loss
+{
 
-ArcFaceImpl::ArcFaceImpl(int64_t num_classes,
-                         int64_t embedding_dim,
-                         double scale,
-                         double margin)
-    : s_(scale), m_(margin) {
-
-    weight_ = register_parameter("weight",
-        torch::randn({num_classes, embedding_dim},
-                     torch::TensorOptions().dtype(torch::kFloat32)));
-    torch::nn::init::xavier_uniform_(weight_);
-
-    std::cout << "ArcFace initialized: " << num_classes
-              << " classes, dim=" << embedding_dim
-              << ", scale=" << s_ << ", margin=" << m_ << std::endl;
-}
-
-LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
-                                  const torch::Tensor& labels) {
-    auto embeddings_norm = torch::nn::functional::normalize(
-        embeddings, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
-
-    auto weight_norm = torch::nn::functional::normalize(
-        weight_, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
-
-    auto cos_theta = embeddings_norm.matmul(weight_norm.t());
-    cos_theta = torch::clamp(cos_theta, -1.0 + 1e-7, 1.0 - 1e-7);
-
-    auto one_hot = torch::zeros_like(cos_theta)
-                       .scatter_(1, labels.view({-1, 1}), 1.0);
-
-    auto theta       = torch::acos(cos_theta);
-    auto cos_theta_m = torch::cos(theta + m_);
-
-    const double threshold    = std::cos(M_PI - m_);
-    const double mm           = std::sin(M_PI - m_) * m_;
-    auto cos_theta_m_safe = torch::where(
-        cos_theta > threshold,
-        cos_theta_m,
-        cos_theta - mm
-    );
-
-    auto output = (one_hot * (cos_theta_m_safe - cos_theta) + cos_theta) * s_;
-    auto loss   = torch::nn::functional::cross_entropy(output, labels);
-
-    if (std::isnan(loss.item<double>())) {
-        std::cerr << "Warning: NaN loss in ArcFace!" << std::endl;
-        loss = torch::tensor(0.0, embeddings.options());
+    static torch::Tensor pairwise_distance(const torch::Tensor& emb) {
+        auto sq  = emb.pow(2).sum(1);                     
+        auto dot = emb.matmul(emb.t());                  
+        auto d2  = sq.unsqueeze(1) + sq.unsqueeze(0) - 2.0 * dot;
+        d2 = torch::clamp_min(d2, 1e-12);
+        return torch::sqrt(d2);                    
     }
 
-    auto pos_cos           = torch::sum(cos_theta * one_hot, 1);
-    double avg_pos_metric  = pos_cos.mean().item<double>();
+    static std::pair<torch::Tensor, torch::Tensor>
+    build_masks(const torch::Tensor& labels, torch::Device device) {
+        auto N      = labels.size(0);
+        auto lab    = labels.view({-1, 1});
+        auto pos    = lab.eq(lab.t());                       
+        auto neg    = lab.ne(lab.t());                        
+        auto eye    = torch::eye(N,
+            torch::TensorOptions().device(device).dtype(torch::kBool));
+        pos = pos.logical_and(eye.logical_not());          
+        return {pos, neg};
+    }
 
-    auto cos_theta_neg     = cos_theta.masked_fill(one_hot.to(torch::kBool), -1e9);
-    auto hardest_neg_cos   = std::get<0>(cos_theta_neg.max(1));
-    double avg_neg_metric  = hardest_neg_cos.mean().item<double>();
+    LossMetrics TripletLossImpl::forward_semi_hard(
+        const torch::Tensor& embeddings,
+        const torch::Tensor& labels)
+    {
+        auto N = embeddings.size(0);
+        if (N <= 1)
+            return {torch::tensor(0.0, embeddings.options()), 0.0, 0.0, 0, 0};
 
-    return {loss, avg_pos_metric, avg_neg_metric, /*num_valid_triplets=*/0, /*num_zero_loss_triplets=*/0};
-}
+        auto device = embeddings.device();
+        auto dist   = pairwise_distance(embeddings);
+        auto [pos_mask, neg_mask] = build_masks(labels, device);
 
-} 
+        const double NEG_INF = -1e9;
+        auto dist_pos    = dist.masked_fill(pos_mask.logical_not(), NEG_INF);
+        auto hardest_pos = std::get<0>(dist_pos.max(1)); 
+
+
+        auto hp_col    = hardest_pos.unsqueeze(1);
+        auto is_semi   = neg_mask
+                         .logical_and(dist.gt(hp_col))
+                         .logical_and(dist.lt(hp_col + margin_));
+
+        const double POS_INF = 1e9;
+        auto dist_semi       = dist.masked_fill(is_semi.logical_not(), POS_INF);
+        auto semi_hard_neg   = std::get<0>(dist_semi.min(1));
+        auto has_semi        = is_semi.any(1);            
+
+        auto dist_neg_all    = dist.masked_fill(neg_mask.logical_not(), NEG_INF);
+        auto easiest_neg     = std::get<0>(dist_neg_all.max(1));
+
+        auto chosen_neg = torch::where(has_semi, semi_hard_neg, easiest_neg);
+
+        auto losses = torch::relu(hardest_pos - chosen_neg + margin_);
+
+        auto has_pos  = pos_mask.any(1);
+        auto has_neg  = neg_mask.any(1);
+        auto valid    = has_pos.logical_and(has_neg);
+        int64_t valid_count = valid.sum().item<int64_t>();
+
+        if (valid_count == 0) {
+            std::cerr << "[TripletLoss] Warning: No valid anchor found!\n";
+            return {torch::tensor(0.0, embeddings.options()), 0.0, 0.0, 0, 0};
+        }
+
+        auto losses_valid  = losses.masked_select(valid);
+        auto hp_valid      = hardest_pos.masked_select(valid);
+        auto hn_valid      = chosen_neg.masked_select(valid);
+
+        double avg_pos_dist = hp_valid.mean().item<double>();
+        double avg_neg_dist = hn_valid.mean().item<double>();
+
+        auto loss            = losses_valid.mean();
+        int64_t zero_count   = losses_valid.eq(0).sum().item<int64_t>();
+        int64_t semi_used    = has_semi.logical_and(valid).sum().item<int64_t>();
+
+        if (std::isnan(loss.item<double>())) {
+            std::cerr << "[TripletLoss] Warning: NaN loss!\n";
+            loss = torch::tensor(0.0, embeddings.options());
+        }
+
+        if (zero_count > valid_count * 0.5) {
+            std::cout << "[TripletLoss Semi-Hard] "
+                      << (100.0 * zero_count / valid_count)
+                      << "% zero-triplets | semi-hard used: "
+                      << semi_used << "/" << valid_count << "\n";
+        }
+
+        return {loss, avg_pos_dist, avg_neg_dist,
+                (int64_t)losses_valid.numel(), zero_count};
+    }
+
+    LossMetrics TripletLossImpl::forward_online_hard(
+        const torch::Tensor& embeddings,
+        const torch::Tensor& labels)
+    {
+        auto N = embeddings.size(0);
+        if (N <= 1)
+            return {torch::tensor(0.0, embeddings.options()), 0.0, 0.0, 0, 0};
+
+        auto device = embeddings.device();
+        auto dist   = pairwise_distance(embeddings);
+        auto [pos_mask, neg_mask] = build_masks(labels, device);
+
+        const double NEG_INF = -1e9;
+        auto dist_pos    = dist.masked_fill(pos_mask.logical_not(), NEG_INF);
+        auto hardest_pos = std::get<0>(dist_pos.max(1));      // [N]
+
+        const double POS_INF = 1e9;
+        auto dist_neg    = dist.masked_fill(neg_mask.logical_not(), POS_INF);
+        auto hardest_neg = std::get<0>(dist_neg.min(1));      // [N]
+
+        auto losses = torch::relu(hardest_pos - hardest_neg + margin_);
+
+        auto has_pos = pos_mask.any(1);
+        auto has_neg = neg_mask.any(1);
+        auto valid   = has_pos.logical_and(has_neg);
+        int64_t valid_count = valid.sum().item<int64_t>();
+
+        if (valid_count == 0) {
+            return {torch::tensor(0.0, embeddings.options()), 0.0, 0.0, 0, 0};
+        }
+
+        auto losses_valid = losses.masked_select(valid);
+        auto hp_valid     = hardest_pos.masked_select(valid);
+        auto hn_valid     = hardest_neg.masked_select(valid);
+
+        double avg_pos_dist = hp_valid.mean().item<double>();
+        double avg_neg_dist = hn_valid.mean().item<double>();
+
+        auto loss           = losses_valid.mean();
+        int64_t zero_count  = losses_valid.eq(0).sum().item<int64_t>();
+
+        if (std::isnan(loss.item<double>())) {
+            loss = torch::tensor(0.0, embeddings.options());
+        }
+
+        return {loss, avg_pos_dist, avg_neg_dist,
+                (int64_t)losses_valid.numel(), zero_count};
+    }
+
+} // namespace Loss

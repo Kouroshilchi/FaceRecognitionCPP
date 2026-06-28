@@ -26,7 +26,7 @@ std::string trim(const std::string& value) {
     return value.substr(begin, end - begin + 1);
 }
 
-} // namespace
+} 
 
 namespace Utils {
 namespace {
@@ -54,7 +54,7 @@ std::vector<std::string> split_csv_line(const std::string& line) {
     return fields;
 }
 
-} // namespace
+} 
 
 AccuracyLFW::AccuracyLFW(const std::filesystem::path& lfw_root,
                          const std::filesystem::path& pairs_file,
@@ -106,7 +106,7 @@ AccuracyLFW::read_pairs() const {
     int line_number = 1;
 
     bool is_csv = (pairs_path.extension() == ".csv");
-    std::getline(input, line); // skip header
+    std::getline(input, line); 
 
     int skipped_lines   = 0;
     int missing_files   = 0;
@@ -412,4 +412,4 @@ double AccuracyLFW::ComputeDistence() const {
     return std::accumulate(sims.begin(), sims.end(), 0.0) / static_cast<double>(sims.size());
 }
 
-} // namespace Utils
+} 
