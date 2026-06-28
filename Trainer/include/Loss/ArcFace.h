@@ -15,19 +15,19 @@ public:
     LossMetrics forward(const torch::Tensor& embeddings, 
                          const torch::Tensor& labels);
 
-    // Getter and Setter
+    
     void set_scale(double s) { s_ = s; }
     void set_margin(double m) { m_ = m; }
     double get_scale() const { return s_; }
     double get_margin() const { return m_; }
 
 private:
-    torch::Tensor weight_;  // [num_classes, embedding_dim]
+    torch::Tensor weight_;  
 
-    double s_;  // scale factor
-    double m_;  // angular margin
+    double s_;  
+    double m_;  
 };
 
 TORCH_MODULE(ArcFace);
 
-} // namespace Loss
+} 
