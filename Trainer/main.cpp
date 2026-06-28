@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
 
         auto dataloader = torch::data::make_data_loader(
             std::move(raw_dataset),
-            torch::data::DataLoaderOptions().batch_size(batch_size)
+            torch::data::DataLoaderOptions().batch_size(batch_size).enforce_ordering(false)
         );
 
         auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 64.0, 0.5);
@@ -211,8 +211,8 @@ int main(int argc, char* argv[]) {
         }
 
         std::cout << "Training complete." << std::endl;
-        std::cout << "Final LFW evaluation:" << std::endl;
-        evaluate_lfw(facenet, device);
+        // std::cout << "Final LFW evaluation:" << std::endl;
+        // evaluate_lfw(facenet, device);
 
         return 0;
 
