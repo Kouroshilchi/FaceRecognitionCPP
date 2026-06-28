@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
         for (auto& p : facenet->parameters()) facenet_params.push_back(p);
 
         torch::optim::Adam optimizer_facenet(facenet_params, torch::optim::AdamOptions(model_lr));
-        auto scheduler_facenet = torch::optim::StepLR(optimizer_facenet, 20, 0.70);
+        auto scheduler_facenet = torch::optim::StepLR(optimizer_facenet, 20, 0.60);
 
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             facenet->train();
