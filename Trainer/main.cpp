@@ -75,9 +75,7 @@ int main(int argc, char* argv[]) {
         init_repo_root(argv[0]);
         std::cout << "Repo root: " << get_repo_root() << std::endl;
 
-        const std::string dataset_root = (argc > 1)
-            ? argv[1]
-            : (get_repo_root() / "data" / "data_casia").string();
+        const std::string dataset_root = (get_repo_root() / "data" / "data_casia").string();
 
         
         const int64_t P      = 32;   
@@ -88,7 +86,7 @@ int main(int argc, char* argv[]) {
         const double  dropout       = 0.1;
         const int64_t epochs        = 100;
         const cv::Size image_size{112, 112};
-        const int64_t SWITCH_EPOCH  = 5;
+        // const int64_t SWITCH_EPOCH  = 5;
 
         int64_t nan_loss_counter  = 0;
         int64_t zero_triplet_counter = 0;
@@ -112,7 +110,10 @@ int main(int argc, char* argv[]) {
 
         
         auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 64.0, 0.5);
-        // torch::load(facenet, get_model_save_path());
+        if ((argc > 1) && (argv[1] == std::string("--resume")))
+        {
+            torch::load(facenet, get_model_save_path());
+        }
         facenet->to(device);
         facenet->train();
 
@@ -127,7 +128,7 @@ int main(int argc, char* argv[]) {
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
             facenet->train();
 
-            std::string mining_mode = (epoch <= SWITCH_EPOCH) ? "Semi-Hard" : "Hard";
+            std::string mining_mode = "Hard";
             std::cout << "\n=== Epoch " << epoch << "/" << epochs
                       << " | Mining: " << mining_mode
                       << " | P=" << P << " K=" << K << " ===" << std::endl;
@@ -217,9 +218,9 @@ int main(int argc, char* argv[]) {
             std::cout << "Zero-triplets    : " << zero_triplet_counter          << std::endl;
             std::cout << "NaN-loss count   : " << nan_loss_counter              << std::endl;
 
-            if (epoch == SWITCH_EPOCH) {
-                std::cout << "\n>>> Switching to Hard Mining from next epoch <<<\n";
-            }
+            // if (epoch == SWITCH_EPOCH) {
+            //     std::cout << "\n>>> Switching to Hard Mining from next epoch <<<\n";
+            // }
 
             scheduler_facenet.step();
 
