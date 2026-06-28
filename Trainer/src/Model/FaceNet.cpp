@@ -26,6 +26,7 @@ torch::Tensor FaceNetImpl::embed(const torch::Tensor& inputs) {
 
     auto norms = emb.norm(2, /*dim=*/1, /*keepdim=*/true).clamp_min(1e-12);
     emb = emb / norms;
+    this->train();
 
     return emb;
 }
