@@ -5,30 +5,41 @@ namespace model {
 
 FaceNetImpl::FaceNetImpl(int64_t num_classes,
                          int64_t embedding_dim,
-                         double dropout,
-                         double scale,
-                         double margin) {
+                         double  dropout,
+                         double  scale,
+                         double  margin) {
     backbone = register_module("backbone", FaceRecognitionModel(3, embedding_dim, dropout));
-    arcface  = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
+    // arcface  = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
+    triplet  = register_module("triplet",  Loss::TripletLoss(0.3));
 }
 
-Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs, const torch::Tensor& labels) {
+Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
+                                        const torch::Tensor& labels,
+                                        int64_t epoch) {
     auto embeddings = backbone->forward(inputs);
-    return arcface->forward(embeddings, labels);
+
+    auto norms = embeddings.norm(2, 1, true).clamp_min(1e-12);
+    embeddings = embeddings / norms;
+
+    Loss::LossMetrics metrics;
+
+    // if (epoch <= 10) {
+    //     metrics = triplet->forward_semi_hard(embeddings , labels);  
+    // } else {
+    //     metrics = triplet->forward_online_hard(embeddings , labels);
+    // }
+    metrics = triplet->forward_online_hard(embeddings , labels);
+    return metrics;
 }
+
 
 torch::Tensor FaceNetImpl::embed(const torch::Tensor& inputs) {
     torch::NoGradGuard no_grad;
-
     this->eval();
-
-    auto emb = backbone->forward(inputs);
-
-    auto norms = emb.norm(2, /*dim=*/1, /*keepdim=*/true).clamp_min(1e-12);
+    auto emb   = backbone->forward(inputs);
+    auto norms = emb.norm(2, 1, true).clamp_min(1e-12);
     emb = emb / norms;
     this->train();
-
     return emb;
 }
-
-} // namespace model
+}
