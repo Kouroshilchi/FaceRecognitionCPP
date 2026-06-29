@@ -18,9 +18,10 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
                                         int64_t epoch) {
     auto embeddings = backbone->forward(inputs);
 
-    auto norms = embeddings.norm(2, 1, true).clamp_min(1e-12);
-    embeddings = embeddings / norms;
-
+    embeddings = torch::nn::functional::normalize(
+        embeddings,
+        torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
+    );
     Loss::LossMetrics metrics;
 
     // if (epoch <= 10) {
