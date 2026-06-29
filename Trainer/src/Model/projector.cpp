@@ -12,6 +12,8 @@ namespace model {
         conv1   = register_module("conv1",   torch::nn::Conv2d(torch::nn::Conv2dOptions(in_channel, 64, 7).stride(2).padding(3).bias(false)));
         bn1     = register_module("bn1",     torch::nn::BatchNorm2d(64));
         relu    = register_module("relu",    torch::nn::ReLU());
+        prelu    = register_module("prelu",    torch::nn::PReLU());
+
         maxpool = register_module("maxpool", torch::nn::MaxPool2d(torch::nn::MaxPool2dOptions(3).stride(2).padding(1)));
 
         int64_t inplanes = 64;
@@ -31,9 +33,11 @@ namespace model {
         layer4 = register_module("layer4", make_layer(512, 3, 2));
 
         avgpool       = register_module("avgpool",       torch::nn::AdaptiveAvgPool2d(torch::nn::AdaptiveAvgPool2dOptions({1, 1})));
-        fc1           = register_module("fc1",           torch::nn::Linear(torch::nn::LinearOptions(512 * model::BottleneckImpl::expansion, out_dim)));
-        bn1_fc1        = register_module("bn1_fc1",        torch::nn::BatchNorm1d(out_dim));
-        dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
+        fc1           = register_module("fc1",           torch::nn::Linear(torch::nn::LinearOptions(512 * model::BottleneckImpl::expansion, 512).bias(false)));
+        bn1_fc1        = register_module("bn1_fc1",        torch::nn::BatchNorm1d(512));
+        fc2           = register_module("fc2",           torch::nn::Linear(torch::nn::LinearOptions(512, out_dim).bias(false)));
+        bn2_fc2        = register_module("bn2_fc2",        torch::nn::BatchNorm1d(out_dim));
+        // dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
 
         try {
             auto repo_root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
@@ -138,6 +142,9 @@ torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
 
     x = fc1->forward(x);
     x = bn1_fc1->forward(x);
+    x = prelu->forward(x);
+    x = fc2->forward(x);
+    x = bn2_fc2->forward(x);
     // x = dropout_layer->forward(x);
 
     return x;
