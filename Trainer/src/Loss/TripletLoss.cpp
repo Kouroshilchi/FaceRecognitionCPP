@@ -53,9 +53,9 @@ namespace Loss
         auto has_semi        = is_semi.any(1);            
 
         auto dist_neg_all    = dist.masked_fill(neg_mask.logical_not(), NEG_INF);
-        auto easiest_neg     = std::get<0>(dist_neg_all.max(1));
+        auto hard_neg     = std::get<0>(dist_neg_all.min(1));
 
-        auto chosen_neg = torch::where(has_semi, semi_hard_neg, easiest_neg);
+        auto chosen_neg = torch::where(has_semi, semi_hard_neg, hard_neg);
 
         // auto losses = torch::relu(hardest_pos - chosen_neg + margin_);
         auto losses = torch::softplus(hardest_pos - chosen_neg);
