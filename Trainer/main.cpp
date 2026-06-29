@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
         const int64_t K      = 8;    
         
 
-        const int64_t embedding_dim = 256;
+        const int64_t embedding_dim = 128;
         const double  dropout       = 0.1;
         const int64_t epochs        = 100;
         const cv::Size image_size{112, 112};
