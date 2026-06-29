@@ -166,8 +166,11 @@ int main(int argc, char* argv[]) {
         facenet->train();
 
         std::vector<torch::Tensor> facenet_params;
-        for (auto& p : facenet->parameters()) facenet_params.push_back(p);
-
+        for (auto& p : facenet->parameters()) 
+        {
+            p.set_requires_grad(true);
+            facenet_params.push_back(p);
+        }
         torch::optim::Adam optimizer_facenet(facenet_params, torch::optim::AdamOptions(model_lr));
         auto scheduler_facenet = torch::optim::StepLR(optimizer_facenet, 20, 0.75);
 
