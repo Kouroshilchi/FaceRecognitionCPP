@@ -18,10 +18,10 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
                                         int64_t epoch) {
     auto embeddings = backbone->forward(inputs);
 
-    embeddings = torch::nn::functional::normalize(
-        embeddings,
-        torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
-    );
+    // embeddings = torch::nn::functional::normalize(
+    //     embeddings,
+    //     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
+    // );
     Loss::LossMetrics metrics;
 
     // if (epoch <= 5) {
@@ -34,15 +34,15 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
 }
 
 
-torch::Tensor FaceNetImpl::embed(const torch::Tensor& inputs) {
-    torch::NoGradGuard no_grad;
-    this->eval();
-    auto emb   = backbone->forward(inputs);
-    emb = torch::nn::functional::normalize(
-        emb,
-        torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
-    );
-    this->train();
-    return emb;
-}
+// torch::Tensor FaceNetImpl::embed(const torch::Tensor& inputs) {
+//     torch::NoGradGuard no_grad;
+//     // this->eval();
+//     auto emb   = backbone->forward(inputs);
+//     // emb = torch::nn::functional::normalize(
+//     //     emb,
+//     //     torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
+//     // );
+//     // this->train();
+//     return emb;
+// }
 }

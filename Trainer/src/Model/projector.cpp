@@ -145,7 +145,7 @@ torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
     x = prelu->forward(x);
     x = fc2->forward(x);
     x = bn2_fc2->forward(x);
+    x = torch::nn::functional::normalize(x, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
     // x = dropout_layer->forward(x);
-
     return x;
 }
