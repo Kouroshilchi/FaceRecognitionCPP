@@ -38,8 +38,10 @@ torch::Tensor FaceNetImpl::embed(const torch::Tensor& inputs) {
     torch::NoGradGuard no_grad;
     this->eval();
     auto emb   = backbone->forward(inputs);
-    auto norms = emb.norm(2, 1, true).clamp_min(1e-12);
-    emb = emb / norms;
+    emb = torch::nn::functional::normalize(
+        emb,
+        torch::nn::functional::NormalizeFuncOptions().p(2).dim(1)
+    );
     this->train();
     return emb;
 }
