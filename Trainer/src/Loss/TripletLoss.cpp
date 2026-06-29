@@ -116,7 +116,7 @@ namespace Loss
         auto dist_neg    = dist.masked_fill(neg_mask.logical_not(), POS_INF);
         auto hardest_neg = std::get<0>(dist_neg.min(1));      // [N]
 
-        auto losses = torch::relu(hardest_pos - hardest_neg + margin_);
+        auto losses = torch::log1p(torch::exp(hardest_pos - hardest_neg));
 
         auto has_pos = pos_mask.any(1);
         auto has_neg = neg_mask.any(1);
