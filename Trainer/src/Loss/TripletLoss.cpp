@@ -10,7 +10,7 @@ namespace Loss
         auto dot = emb.matmul(emb.t());                  
         auto d2  = sq.unsqueeze(1) + sq.unsqueeze(0) - 2.0 * dot;
         d2 = torch::clamp_min(d2, 1e-12);
-        return torch::sqrt(d2);                    
+        return d2;            
     }
 
     static std::pair<torch::Tensor, torch::Tensor>
