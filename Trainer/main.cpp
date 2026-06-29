@@ -138,14 +138,33 @@ int main(int argc, char* argv[]) {
 
         
         auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 64.0, 0.5);
-        if ((argc > 1) && (argv[1] == std::string("--resume")))
-        {
+        bool resume = false;
+        double model_lr = 1e-4;  
+
+        for (int i = 1; i < argc; ++i) {
+            if (std::string(argv[i]) == "--resume") {
+                resume = true;
+            }
+            else if (std::string(argv[i]) == "--lr") {
+                if (i + 1 < argc) { 
+                    model_lr = std::stod(argv[i + 1]);
+                    ++i;  
+                } else {
+                    std::cerr << "Error: --lr requires a value" << std::endl;
+                    return 1;
+                }
+            }
+        }
+
+        if (resume) {
             torch::load(facenet, get_model_save_path());
+            std::cout << "Resuming from checkpoint." << std::endl;
+        } else {
+            std::cout << "Training from scratch with lr=" << model_lr << std::endl;
         }
         facenet->to(device);
         facenet->train();
 
-        const double model_lr = 1e-4;
         std::vector<torch::Tensor> facenet_params;
         for (auto& p : facenet->parameters()) facenet_params.push_back(p);
 
