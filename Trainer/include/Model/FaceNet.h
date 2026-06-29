@@ -19,7 +19,7 @@ struct FaceNetImpl : torch::nn::Module {
     Loss::LossMetrics forward(const torch::Tensor& inputs,
                               const torch::Tensor& labels,
                               int64_t epoch = 1);
-    torch::Tensor embed(const torch::Tensor& inputs);
+    // torch::Tensor embed(const torch::Tensor& inputs);
     model::FaceRecognitionModel backbone{nullptr};
     // Loss::ArcFace               arcface{nullptr};
     Loss::TripletLoss           triplet{nullptr};
