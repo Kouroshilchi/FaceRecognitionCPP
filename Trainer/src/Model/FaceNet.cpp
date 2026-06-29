@@ -24,11 +24,11 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
     );
     Loss::LossMetrics metrics;
 
-    // if (epoch <= 10) {
-    //     metrics = triplet->forward_semi_hard(embeddings , labels);  
-    // } else {
-    //     metrics = triplet->forward_online_hard(embeddings , labels);
-    // }
+    if (epoch <= 4) {
+        metrics = triplet->forward_semi_hard(embeddings , labels);  
+    } else {
+        metrics = triplet->forward_online_hard(embeddings , labels);
+    }
     metrics = triplet->forward_online_hard(embeddings , labels);
     return metrics;
 }

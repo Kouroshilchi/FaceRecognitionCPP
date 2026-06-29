@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
         const int64_t K      = 8;    
         
 
-        const int64_t embedding_dim = 128;
+        const int64_t embedding_dim = 256;
         const double  dropout       = 0.1;
         const int64_t epochs        = 100;
         const cv::Size image_size{112, 112};
@@ -225,7 +225,7 @@ int main(int argc, char* argv[]) {
                 zero_triplet_counter += metrics.num_zero_loss_triplets;
 
                 loss.backward();
-                torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
+                // torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
                 optimizer_facenet.step();
 
                 epoch_loss   += loss_val;
