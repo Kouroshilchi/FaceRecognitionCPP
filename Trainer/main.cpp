@@ -18,6 +18,26 @@
 
 static std::filesystem::path g_repo_root;
 
+std::string getOsName()
+{
+    #ifdef _WIN32
+    return "Windows 32-bit";
+    #elif _WIN64
+    return "Windows 64-bit";
+    #elif __APPLE__ || __MACH__
+    return "Mac OSX";
+    #elif __linux__
+    return "Linux";
+    #elif __FreeBSD__
+    return "FreeBSD";
+    #elif __unix || __unix__
+    return "Unix";
+    #else
+    return "Other";
+    #endif
+}                      
+
+
 void init_repo_root(const char* argv0) {
     const char* env = std::getenv("REPO_ROOT");
     if (env && std::filesystem::exists(env)) {
@@ -25,7 +45,15 @@ void init_repo_root(const char* argv0) {
         return;
     }
     auto bin = std::filesystem::canonical(argv0);
-    g_repo_root = bin.parent_path().parent_path();
+    if (getOsName() == "Windows 32-bit" || getOsName() == "Windows 64-bit") {
+        g_repo_root = bin.parent_path().parent_path().parent_path();
+    }
+    else if (getOsName() == "Linux" || getOsName() == "Mac OSX") {
+        g_repo_root = bin.parent_path().parent_path();
+    }
+    else {
+        throw std::runtime_error("Unsupported OS: " + getOsName());
+    }
 }
 
 std::filesystem::path get_repo_root()  { return g_repo_root; }
