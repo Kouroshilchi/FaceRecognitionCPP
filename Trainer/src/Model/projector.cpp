@@ -36,7 +36,7 @@ namespace model {
         fc1           = register_module("fc1",           torch::nn::Linear(torch::nn::LinearOptions(512 * model::BottleneckImpl::expansion, 512).bias(false)));
         bn1_fc1        = register_module("bn1_fc1",        torch::nn::BatchNorm1d(512));
         fc2           = register_module("fc2",           torch::nn::Linear(torch::nn::LinearOptions(512, out_dim).bias(false)));
-        // bn2_fc2        = register_module("bn2_fc2",        torch::nn::BatchNorm1d(out_dim));
+        bn2_fc2        = register_module("bn2_fc2",        torch::nn::BatchNorm1d(out_dim));
         // dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
 
         try {
@@ -144,7 +144,7 @@ torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
     x = bn1_fc1->forward(x);
     x = prelu->forward(x);
     x = fc2->forward(x);
-    // x = bn2_fc2->forward(x);
+    x = bn2_fc2->forward(x);
     // x = dropout_layer->forward(x);
 
     return x;
