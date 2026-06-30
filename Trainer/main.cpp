@@ -295,7 +295,7 @@ int main(int argc, char* argv[]) {
                 if (batch_index % 500 == 0) {
                     torch::save(facenet, get_model_save_path());
                     std::cout << "Checkpoint saved." << std::endl;
-                    evaluate_lfw(facenet, device);
+                    // evaluate_lfw(facenet, device);
                 }
             }
 

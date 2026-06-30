@@ -169,7 +169,7 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
 
         torch::Tensor embed_ = model->forward(tensor);
         float confidence = 0.0;
-        std::string name = face_processor.search_faces(embed_ ,0.85 , confidence);
+        std::string name = face_processor.search_faces(embed_ ,0.4 , confidence);
 
 
         g_lastEmbedding = embed_.detach().to(torch::kCPU).clone();
