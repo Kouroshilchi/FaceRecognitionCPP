@@ -1,7 +1,7 @@
 #pragma once
 #include <torch/torch.h>
-#include "backbone.h"
 #include "projector.h"
+#include "head.h"
 
 
 namespace model {
@@ -9,11 +9,11 @@ namespace model {
         FaceRecognitionModelImpl(
             int num_channel,
             int out_dim,
-            double dropout
+            bool pretrained_=true
         );
 
         torch::Tensor forward(torch::Tensor x);
-        // FaceRecognitionBackBone backbone{nullptr};
+        FaceRecognitionHead head{nullptr};
         FaceRecognitionProjector projector{nullptr};
     };
     TORCH_MODULE(FaceRecognitionModel);

@@ -4,15 +4,12 @@
 namespace model {
     FaceRecognitionProjectorImpl::FaceRecognitionProjectorImpl(
         int in_channel,
-        int out_dim,
-        double dropout
+        bool pretrained_
     )
     {
         conv1   = register_module("conv1",   torch::nn::Conv2d(torch::nn::Conv2dOptions(in_channel, 64, 7).stride(2).padding(3).bias(false)));
         bn1     = register_module("bn1",     torch::nn::BatchNorm2d(64));
         relu    = register_module("relu",    torch::nn::ReLU());
-        prelu    = register_module("prelu",    torch::nn::PReLU());
-
         maxpool = register_module("maxpool", torch::nn::MaxPool2d(torch::nn::MaxPool2dOptions(3).stride(2).padding(1)));
 
         int64_t inplanes = 64;
@@ -30,19 +27,17 @@ namespace model {
         layer2 = register_module("layer2", make_layer(128, 4, 2));
         layer3 = register_module("layer3", make_layer(256, 6, 2));
         layer4 = register_module("layer4", make_layer(512, 3, 2));
-
-        avgpool       = register_module("avgpool",       torch::nn::AdaptiveAvgPool2d(torch::nn::AdaptiveAvgPool2dOptions({1, 1})));
-        fc1           = register_module("fc1",           torch::nn::Linear(torch::nn::LinearOptions(512 * model::BottleneckImpl::expansion, 512).bias(false)));
-        bn1_fc1        = register_module("bn1_fc1",        torch::nn::BatchNorm1d(512));
-        fc2           = register_module("fc2",           torch::nn::Linear(torch::nn::LinearOptions(512, out_dim).bias(false)));
-        bn2_fc2        = register_module("bn2_fc2",        torch::nn::BatchNorm1d(out_dim));
-
-        try {
-            auto repo_root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
-            auto default_weights = repo_root / "models" / "resnet50_weights.pt";
-            load_pretrained_weights(default_weights.string());
-        } catch (const std::exception& ex) {
-            std::cerr << "Warning: pretrained weights not loaded: " << ex.what() << std::endl;
+        if (pretrained_ == true){
+            try {
+                auto repo_root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
+                auto default_weights = repo_root / "models" / "resnet50_weights.pt";
+                load_pretrained_weights(default_weights.string());
+            } catch (const std::exception& ex) {
+                std::cerr << "Warning: pretrained weights not loaded: " << ex.what() << std::endl;
+            }
+        }
+        else {
+            std::cout << "using pretrained False" << std::endl;
         }
     }
 
@@ -134,14 +129,5 @@ torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
     x = layer2->forward(x);
     x = layer3->forward(x);
     x = layer4->forward(x);
-
-    x = avgpool->forward(x);
-    x = x.view({x.size(0), -1});
-
-    x = fc1->forward(x);
-    x = bn1_fc1->forward(x);
-    x = relu->forward(x);
-    x = fc2->forward(x);
-    x = torch::nn::functional::normalize(x, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
     return x;
 }

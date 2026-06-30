@@ -1,19 +1,20 @@
 #include "../include/Model/Model.h"
+#include "../include/Model/head.h"
 
 namespace model {
     FaceRecognitionModelImpl::FaceRecognitionModelImpl(
         int num_channel,
         int out_dim,
-        double dropout
+        bool pretrained_
     )
     {
-        // backbone = register_module("backbone", FaceRecognitionBackBone(num_channel, 128 , dropout));
-        projector = register_module("projector", FaceRecognitionProjector(3, out_dim, dropout));
+        projector = register_module("projector", FaceRecognitionProjector(3 , pretrained_));
+        head = register_module("head", FaceRecognitionHead(out_dim , 4));
     }
 
     torch::Tensor FaceRecognitionModelImpl::forward(torch::Tensor x) {
-        // x = backbone->forward(x);
         x = projector->forward(x);
+        x = head->forward(x);
         return x;
     }
 }
