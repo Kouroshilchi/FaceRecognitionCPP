@@ -21,13 +21,11 @@ ArcFaceImpl::ArcFaceImpl(int64_t num_classes,
 
 LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
                                   const torch::Tensor& labels) {
-    auto embeddings_norm = torch::nn::functional::normalize(
-        embeddings, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
 
     auto weight_norm = torch::nn::functional::normalize(
         weight_, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
 
-    auto cos_theta = embeddings_norm.matmul(weight_norm.t());
+    auto cos_theta = embeddings.matmul(weight_norm.t());
     cos_theta = torch::clamp(cos_theta, -1.0 + 1e-7, 1.0 - 1e-7);
 
     auto one_hot = torch::zeros_like(cos_theta)
