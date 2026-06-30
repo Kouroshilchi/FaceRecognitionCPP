@@ -9,7 +9,7 @@ FaceNetImpl::FaceNetImpl(int64_t num_classes,
                          double  scale,
                          double  margin) {
     backbone = register_module("backbone", FaceRecognitionModel(3, embedding_dim, dropout));
-    // arcface  = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
+    arcface  = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
     triplet  = register_module("triplet",  Loss::TripletLoss(0.3));
 }
 
@@ -19,7 +19,9 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
     backbone->train();
     auto embeddings = backbone->forward(inputs);
     // std::cout << "Embeddings shape: " << embeddings << std::endl;
-    return triplet->forward_semi_hard(embeddings , labels);
+    // return triplet->forward_online_hard(embeddings , labels);
+    return arcface->forward(embeddings , labels);
+
 }
 
 
