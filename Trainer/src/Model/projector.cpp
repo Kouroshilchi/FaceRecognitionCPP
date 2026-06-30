@@ -8,7 +8,6 @@ namespace model {
         double dropout
     )
     {
-        // ResNet-50 stem
         conv1   = register_module("conv1",   torch::nn::Conv2d(torch::nn::Conv2dOptions(in_channel, 64, 7).stride(2).padding(3).bias(false)));
         bn1     = register_module("bn1",     torch::nn::BatchNorm2d(64));
         relu    = register_module("relu",    torch::nn::ReLU());
@@ -37,7 +36,6 @@ namespace model {
         bn1_fc1        = register_module("bn1_fc1",        torch::nn::BatchNorm1d(512));
         fc2           = register_module("fc2",           torch::nn::Linear(torch::nn::LinearOptions(512, out_dim).bias(false)));
         bn2_fc2        = register_module("bn2_fc2",        torch::nn::BatchNorm1d(out_dim));
-        // dropout_layer = register_module("dropout_layer", torch::nn::Dropout(dropout));
 
         try {
             auto repo_root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
@@ -142,10 +140,8 @@ torch::Tensor model::FaceRecognitionProjectorImpl::forward(torch::Tensor x) {
 
     x = fc1->forward(x);
     x = bn1_fc1->forward(x);
-    x = prelu->forward(x);
+    x = relu->forward(x);
     x = fc2->forward(x);
-    x = bn2_fc2->forward(x);
     x = torch::nn::functional::normalize(x, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
-    // x = dropout_layer->forward(x);
     return x;
 }
