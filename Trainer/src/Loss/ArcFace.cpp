@@ -1,5 +1,10 @@
 #include "../include/Loss/ArcFace.h"
 #include <iostream>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace Loss {
 
@@ -30,17 +35,20 @@ LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
 
     auto index = labels.view({-1, 1}); // [N,1]
 
-    auto target_logit = logits.gather(1, index).squeeze(1); // [N]
+    auto target_logit = logits.gather(1, index).squeeze(1); // [N] = cos(theta_y)
 
-    torch::Tensor final_target_logit;
-    {
+    // cos(theta + m) = cos(theta)*cos(m) - sin(theta)*sin(m)
+    const double cos_m = std::cos(m_);
+    const double sin_m = std::sin(m_);
+    const double th    = std::cos(M_PI - m_);          // threshold: cos(pi - m)
+    const double mm    = std::sin(M_PI - m_) * m_;       // correction term
 
-        torch::NoGradGuard no_grad;
-        auto theta_y = torch::acos(target_logit);          // theta_y_i
-        final_target_logit = theta_y + m_;                  // theta_y_i + m
-        final_target_logit = torch::cos(final_target_logit); // cos(theta_y_i + m)
-    }
+    auto sin_theta = torch::sqrt(torch::clamp(1.0 - target_logit * target_logit, 0.0, 1.0));
+    auto cos_theta_m = target_logit * cos_m - sin_theta * sin_m;
 
+    // Monotonicity fix: only use cos(theta+m) while theta+m <= pi,
+    // otherwise fall back to a linear/easy-margin substitute (cos_theta - mm)
+    auto final_target_logit = torch::where(target_logit > th, cos_theta_m, target_logit - mm);
 
     logits = logits.scatter(1, index, final_target_logit.unsqueeze(1));
 
