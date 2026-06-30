@@ -136,18 +136,18 @@ int main(int argc, char* argv[]) {
         std::cout << "Batch config     : P=" << P << " classes x K=" << K << " images = " << sampler.batch_size() << " per batch" << std::endl;
         std::cout << "Batches per epoch: " << sampler.num_batches() << std::endl;
 
-        
-        auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 64.0, 0.5);
         bool resume = false;
         double model_lr    = 1e-4;
         double arcface_lr  = 1e-2;
+        model::LossType loss_type = model::LossType::ArcFace;
+        std::string loss_name = "arcface";
 
         for (int i = 1; i < argc; ++i) {
             if (std::string(argv[i]) == "--resume") {
                 resume = true;
             }
             else if (std::string(argv[i]) == "--model_lr") {
-                if (i + 1 < argc) { 
+                if (i + 1 < argc) {
                     model_lr = std::stod(argv[i + 1]);
                     ++i;
                 } else {
@@ -164,14 +164,40 @@ int main(int argc, char* argv[]) {
                     return 1;
                 }
             }
+            else if (std::string(argv[i]) == "--loss") {
+                if (i + 1 < argc) {
+                    std::string value = argv[i + 1];
+                    ++i;
+                    if (value == "arcface") {
+                        loss_type = model::LossType::ArcFace;
+                        loss_name = value;
+                    } else if (value == "triplet_semi") {
+                        loss_type = model::LossType::TripletSemiHard;
+                        loss_name = value;
+                    } else if (value == "triplet_hard" || value == "triplet") {
+                        loss_type = model::LossType::TripletOnlineHard;
+                        loss_name = value;
+                    } else {
+                        std::cerr << "Error: unknown loss type '" << value << "'. "
+                                  << "Supported values: arcface, triplet_semi, triplet_hard" << std::endl;
+                        return 1;
+                    }
+                } else {
+                    std::cerr << "Error: --loss requires a value" << std::endl;
+                    return 1;
+                }
+            }
         }
+
+        auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, loss_type, 64.0, 0.5);
 
         if (resume) {
             torch::load(facenet, get_model_save_path());
             std::cout << "Resuming from checkpoint." << std::endl;
         } else {
             std::cout << "Training from scratch with model_lr=" << model_lr
-                      << " arcface_lr=" << arcface_lr << std::endl;
+                      << " arcface_lr=" << arcface_lr
+                      << " loss=" << loss_name << std::endl;
         }
         facenet->to(device);
         facenet->train();
@@ -230,7 +256,7 @@ int main(int argc, char* argv[]) {
 
                 optimizer_facenet.zero_grad();
 
-                auto metrics    = facenet->forward(inputs, labels, epoch);
+                auto metrics    = facenet->forward(inputs, labels, loss_type, epoch);
                 auto loss       = metrics.loss;
                 double loss_val = loss.item<double>();
 
@@ -244,7 +270,7 @@ int main(int argc, char* argv[]) {
                 zero_triplet_counter += metrics.num_zero_loss_triplets;
 
                 loss.backward();
-                // torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
+                torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
                 optimizer_facenet.step();
 
                 epoch_loss   += loss_val;
