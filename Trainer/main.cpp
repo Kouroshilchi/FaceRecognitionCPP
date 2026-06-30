@@ -111,10 +111,9 @@ int main(int argc, char* argv[]) {
         
 
         const int64_t embedding_dim = 128;
-        const double  dropout       = 0.1;
         const int64_t epochs        = 100;
         const cv::Size image_size{112, 112};
-        // const int64_t SWITCH_EPOCH  = 5;
+        bool pretrained_resnet = true;
 
         int64_t nan_loss_counter  = 0;
         int64_t zero_triplet_counter = 0;
@@ -139,6 +138,7 @@ int main(int argc, char* argv[]) {
         bool resume = false;
         double model_lr    = 1e-4;
         double arcface_lr  = 1e-4;
+        double model_lastlayer_lr = 1e-4;
         model::LossType loss_type = model::LossType::ArcFace;
         std::string loss_name = "arcface";
 
@@ -146,12 +146,24 @@ int main(int argc, char* argv[]) {
             if (std::string(argv[i]) == "--resume") {
                 resume = true;
             }
+            else if (std::string(argv[i]) == "--scratch") {
+                pretrained_resnet = false;
+            }
             else if (std::string(argv[i]) == "--model_lr") {
                 if (i + 1 < argc) {
                     model_lr = std::stod(argv[i + 1]);
                     ++i;
                 } else {
                     std::cerr << "Error: --model_lr requires a value" << std::endl;
+                    return 1;
+                }
+            }
+            else if (std::string(argv[i]) == "--lastlayer_lr") {
+                if (i + 1 < argc) {
+                    model_lastlayer_lr = std::stod(argv[i + 1]);
+                    ++i;
+                } else {
+                    std::cerr << "Error: --lastlayer_lr requires a value" << std::endl;
                     return 1;
                 }
             }
@@ -189,32 +201,29 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, loss_type, 64.0, 0.5);
+        auto facenet = model::FaceNet(num_classes, embedding_dim, loss_type, 64.0, 0.5 , pretrained_resnet);
 
         if (resume) {
             torch::load(facenet, get_model_save_path());
             std::cout << "Resuming from checkpoint." << std::endl;
         } else {
             std::cout << "Training from scratch with model_lr=" << model_lr
+                      << " model_lastlayer_lr=" << model_lastlayer_lr
                       << " arcface_lr=" << arcface_lr
                       << " loss=" << loss_name << std::endl;
         }
         facenet->to(device);
         facenet->train();
-
-        // std::vector<torch::Tensor> facenet_params;
-        // for (auto& p : facenet->parameters()) 
-        // {
-        //     p.set_requires_grad(true);
-        //     facenet_params.push_back(p);
-        // }
-        // torch::optim::Adam optimizer_facenet(facenet_params, torch::optim::AdamOptions(model_lr));
-        std::vector<torch::Tensor> backbone_params, arcface_params;
-        for (auto& p : facenet->backbone->parameters()) backbone_params.push_back(p);
+        std::vector<torch::Tensor> backbone_params, arcface_params, head_params;
+        for (auto& p : facenet->backbone->projector->parameters()) backbone_params.push_back(p);
+        
         for (auto& p : facenet->arcface->parameters())  arcface_params.push_back(p);
+
+        for (auto& p : facenet->backbone->head->parameters()) head_params.push_back(p);
 
         torch::optim::Adam optimizer_facenet({
             torch::optim::OptimizerParamGroup(backbone_params, std::make_unique<torch::optim::AdamOptions>(model_lr)),
+            torch::optim::OptimizerParamGroup(head_params, std::make_unique<torch::optim::AdamOptions>(model_lastlayer_lr)),
             torch::optim::OptimizerParamGroup(arcface_params,  std::make_unique<torch::optim::AdamOptions>(arcface_lr))
         });
         auto scheduler_facenet = torch::optim::StepLR(optimizer_facenet, 20, 0.75);
