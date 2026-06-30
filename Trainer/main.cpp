@@ -139,18 +139,28 @@ int main(int argc, char* argv[]) {
         
         auto facenet = model::FaceNet(num_classes, embedding_dim, dropout, 64.0, 0.5);
         bool resume = false;
-        double model_lr = 1e-4;  
+        double model_lr    = 1e-4;
+        double arcface_lr  = 1e-2;
 
         for (int i = 1; i < argc; ++i) {
             if (std::string(argv[i]) == "--resume") {
                 resume = true;
             }
-            else if (std::string(argv[i]) == "--lr") {
+            else if (std::string(argv[i]) == "--model_lr") {
                 if (i + 1 < argc) { 
                     model_lr = std::stod(argv[i + 1]);
-                    ++i;  
+                    ++i;
                 } else {
-                    std::cerr << "Error: --lr requires a value" << std::endl;
+                    std::cerr << "Error: --model_lr requires a value" << std::endl;
+                    return 1;
+                }
+            }
+            else if (std::string(argv[i]) == "--arcface_lr") {
+                if (i + 1 < argc) {
+                    arcface_lr = std::stod(argv[i + 1]);
+                    ++i;
+                } else {
+                    std::cerr << "Error: --arcface_lr requires a value" << std::endl;
                     return 1;
                 }
             }
@@ -160,18 +170,27 @@ int main(int argc, char* argv[]) {
             torch::load(facenet, get_model_save_path());
             std::cout << "Resuming from checkpoint." << std::endl;
         } else {
-            std::cout << "Training from scratch with lr=" << model_lr << std::endl;
+            std::cout << "Training from scratch with model_lr=" << model_lr
+                      << " arcface_lr=" << arcface_lr << std::endl;
         }
         facenet->to(device);
         facenet->train();
 
-        std::vector<torch::Tensor> facenet_params;
-        for (auto& p : facenet->parameters()) 
-        {
-            p.set_requires_grad(true);
-            facenet_params.push_back(p);
-        }
-        torch::optim::Adam optimizer_facenet(facenet_params, torch::optim::AdamOptions(model_lr));
+        // std::vector<torch::Tensor> facenet_params;
+        // for (auto& p : facenet->parameters()) 
+        // {
+        //     p.set_requires_grad(true);
+        //     facenet_params.push_back(p);
+        // }
+        // torch::optim::Adam optimizer_facenet(facenet_params, torch::optim::AdamOptions(model_lr));
+        std::vector<torch::Tensor> backbone_params, arcface_params;
+        for (auto& p : facenet->backbone->parameters()) backbone_params.push_back(p);
+        for (auto& p : facenet->arcface->parameters())  arcface_params.push_back(p);
+
+        torch::optim::Adam optimizer_facenet({
+            torch::optim::OptimizerParamGroup(backbone_params, std::make_unique<torch::optim::AdamOptions>(model_lr)),
+            torch::optim::OptimizerParamGroup(arcface_params,  std::make_unique<torch::optim::AdamOptions>(arcface_lr))
+        });
         auto scheduler_facenet = torch::optim::StepLR(optimizer_facenet, 20, 0.75);
 
         
