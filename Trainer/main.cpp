@@ -112,7 +112,7 @@ int main(int argc, char* argv[]) {
 
         const int64_t embedding_dim = 128;
         const int64_t epochs        = 100;
-        const cv::Size image_size{112, 112};
+        const cv::Size image_size {112, 112};
         bool pretrained_resnet = true;
 
         int64_t nan_loss_counter  = 0;
@@ -201,7 +201,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        auto facenet = model::FaceNet(num_classes, embedding_dim, loss_type, 64.0, 0.5 , pretrained_resnet);
+        auto facenet = model::FaceNet(num_classes, embedding_dim, loss_type, 64.0, 0.5 , pretrained_resnet, (loss_type == model::LossType::ArcFace));
 
         if (resume) {
             torch::load(facenet, get_model_save_path());
@@ -279,7 +279,6 @@ int main(int argc, char* argv[]) {
                 zero_triplet_counter += metrics.num_zero_loss_triplets;
 
                 loss.backward();
-                // torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
                 optimizer_facenet.step();
 
                 epoch_loss   += loss_val;
@@ -304,7 +303,6 @@ int main(int argc, char* argv[]) {
                 if (batch_index % 500 == 0) {
                     torch::save(facenet, get_model_save_path());
                     std::cout << "Checkpoint saved." << std::endl;
-                    // evaluate_lfw(facenet, device);
                 }
             }
 
@@ -322,10 +320,6 @@ int main(int argc, char* argv[]) {
             std::cout << "Batches processed: " << batch_index                   << std::endl;
             std::cout << "Zero-triplets    : " << zero_triplet_counter          << std::endl;
             std::cout << "NaN-loss count   : " << nan_loss_counter              << std::endl;
-
-            // if (epoch == SWITCH_EPOCH) {
-            //     std::cout << "\n>>> Switching to Hard Mining from next epoch <<<\n";
-            // }
 
             scheduler_facenet.step();
 

@@ -8,10 +8,13 @@ FaceNetImpl::FaceNetImpl(int64_t num_classes,
                          LossType loss_type,
                          double  scale,
                          double  margin , 
-                         bool pretrained_)
+                         bool pretrained_ , 
+                         bool arcface_)
     : default_loss_type(loss_type) {
     backbone = register_module("backbone", FaceRecognitionModel(3, embedding_dim , pretrained_));
-    arcface  = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
+    if (arcface_ == true){
+        Loss::ArcFace arcface = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
+    }
     triplet  = register_module("triplet",  Loss::TripletLoss(0.3));
 }
 
@@ -28,7 +31,7 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
     this->train();
     auto embeddings = backbone->forward(inputs);
     switch (loss_type) {
-        case LossType::ArcFace:
+        case LossType::ArcFace: 
             return arcface->forward(embeddings, labels);
         case LossType::TripletSemiHard:
             return triplet->forward_semi_hard(embeddings, labels);

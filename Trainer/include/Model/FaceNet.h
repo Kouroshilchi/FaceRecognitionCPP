@@ -20,7 +20,8 @@ struct FaceNetImpl : torch::nn::Module {
                LossType loss_type = LossType::ArcFace,
                double scale  = 64.0,
                double margin = 0.5,
-               bool pretrained_=true);
+               bool pretrained_=true, 
+               bool arcface_=false);
 
     
     Loss::LossMetrics forward(const torch::Tensor& inputs,
