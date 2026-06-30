@@ -25,24 +25,26 @@ LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
     auto weight_norm = torch::nn::functional::normalize(
         weight_, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
 
-    auto cos_theta = embeddings.matmul(weight_norm.t());
-    cos_theta = torch::clamp(cos_theta, -1.0 + 1e-7, 1.0 - 1e-7);
+    auto logits = embeddings.matmul(weight_norm.t());
+    logits = torch::clamp(logits, -1.0 + 1e-7, 1.0 - 1e-7);
 
-    auto one_hot = torch::zeros_like(cos_theta)
-                       .scatter_(1, labels.view({-1, 1}), 1.0);
+    auto index = labels.view({-1, 1}); // [N,1]
 
-    auto sin_theta   = torch::sqrt(torch::clamp(1.0 - cos_theta * cos_theta, 0.0, 1.0));
-    auto cos_theta_m = cos_theta * std::cos(m_) - sin_theta * std::sin(m_);
+    auto target_logit = logits.gather(1, index).squeeze(1); // [N]
 
-    const double threshold    = std::cos(M_PI - m_);
-    const double mm           = std::sin(M_PI - m_) * m_;
-    auto cos_theta_m_safe = torch::where(
-        cos_theta > threshold,
-        cos_theta_m,
-        cos_theta - mm
-    );
+    torch::Tensor final_target_logit;
+    {
 
-    auto output = (one_hot * (cos_theta_m_safe - cos_theta) + cos_theta) * s_;
+        torch::NoGradGuard no_grad;
+        auto theta_y = torch::acos(target_logit);          // theta_y_i
+        final_target_logit = theta_y + m_;                  // theta_y_i + m
+        final_target_logit = torch::cos(final_target_logit); // cos(theta_y_i + m)
+    }
+
+
+    logits = logits.scatter(1, index, final_target_logit.unsqueeze(1));
+
+    auto output = logits * s_;
     auto loss   = torch::nn::functional::cross_entropy(output, labels);
 
     if (std::isnan(loss.item<double>())) {
@@ -50,14 +52,17 @@ LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
         loss = torch::tensor(0.0, embeddings.options());
     }
 
-    auto pos_cos           = torch::sum(cos_theta * one_hot, 1);
-    double avg_pos_metric  = pos_cos.mean().item<double>();
+    auto cos_theta_raw = embeddings.matmul(weight_norm.t()); 
+    auto one_hot = torch::zeros_like(cos_theta_raw).scatter_(1, index, 1.0);
 
-    auto cos_theta_neg     = cos_theta.masked_fill(one_hot.to(torch::kBool), -1e9);
-    auto hardest_neg_cos   = std::get<0>(cos_theta_neg.max(1));
-    double avg_neg_metric  = hardest_neg_cos.mean().item<double>();
+    auto pos_cos          = torch::sum(cos_theta_raw * one_hot, 1);
+    double avg_pos_metric = pos_cos.mean().item<double>();
+
+    auto cos_theta_neg    = cos_theta_raw.masked_fill(one_hot.to(torch::kBool), -1e9);
+    auto hardest_neg_cos  = std::get<0>(cos_theta_neg.max(1));
+    double avg_neg_metric = hardest_neg_cos.mean().item<double>();
 
     return {loss, avg_pos_metric, avg_neg_metric, 0, 0};
 }
 
-} 
+}

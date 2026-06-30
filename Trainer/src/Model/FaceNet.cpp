@@ -25,7 +25,7 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
                                         const torch::Tensor& labels,
                                         LossType loss_type,
                                         int64_t epoch) {
-    backbone->train();
+    this->train();
     auto embeddings = backbone->forward(inputs);
     switch (loss_type) {
         case LossType::ArcFace:
@@ -42,9 +42,9 @@ Loss::LossMetrics FaceNetImpl::forward(const torch::Tensor& inputs,
 
 torch::Tensor FaceNetImpl::embed(const torch::Tensor& inputs) {
     torch::NoGradGuard no_grad;
-    backbone->eval();
+    this->eval();
     auto emb   = backbone->forward(inputs);
-    backbone->train();
+    this->train();
     return emb;
 }
 }

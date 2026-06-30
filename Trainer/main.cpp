@@ -103,11 +103,11 @@ int main(int argc, char* argv[]) {
         init_repo_root(argv[0]);
         std::cout << "Repo root: " << get_repo_root() << std::endl;
 
-        const std::string dataset_root = (get_repo_root() / "data" / "data_vgg2_casia").string();
+        const std::string dataset_root = (get_repo_root() / "data" / "data_casia").string();
 
         
-        const int64_t P      = 16;   
-        const int64_t K      = 10;    
+        const int64_t P      = 32;   
+        const int64_t K      = 8;    
         
 
         const int64_t embedding_dim = 128;
@@ -138,7 +138,7 @@ int main(int argc, char* argv[]) {
 
         bool resume = false;
         double model_lr    = 1e-4;
-        double arcface_lr  = 1e-2;
+        double arcface_lr  = 1e-4;
         model::LossType loss_type = model::LossType::ArcFace;
         std::string loss_name = "arcface";
 
@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
                 zero_triplet_counter += metrics.num_zero_loss_triplets;
 
                 loss.backward();
-                torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
+                // torch::nn::utils::clip_grad_norm_(facenet->parameters(), 5.0);
                 optimizer_facenet.step();
 
                 epoch_loss   += loss_val;
@@ -292,9 +292,10 @@ int main(int argc, char* argv[]) {
                               << std::endl;
                 }
 
-                if (batch_index % 1000 == 0) {
+                if (batch_index % 500 == 0) {
                     torch::save(facenet, get_model_save_path());
                     std::cout << "Checkpoint saved." << std::endl;
+                    evaluate_lfw(facenet, device);
                 }
             }
 
