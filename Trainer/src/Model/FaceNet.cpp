@@ -5,12 +5,12 @@ namespace model {
 
 FaceNetImpl::FaceNetImpl(int64_t num_classes,
                          int64_t embedding_dim,
-                         double  dropout,
                          LossType loss_type,
                          double  scale,
-                         double  margin)
+                         double  margin , 
+                         bool pretrained_)
     : default_loss_type(loss_type) {
-    backbone = register_module("backbone", FaceRecognitionModel(3, embedding_dim, dropout));
+    backbone = register_module("backbone", FaceRecognitionModel(3, embedding_dim , pretrained_));
     arcface  = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
     triplet  = register_module("triplet",  Loss::TripletLoss(0.3));
 }

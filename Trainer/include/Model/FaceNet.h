@@ -17,10 +17,10 @@ enum class LossType {
 struct FaceNetImpl : torch::nn::Module {
     FaceNetImpl(int64_t num_classes,
                int64_t embedding_dim,
-               double dropout,
                LossType loss_type = LossType::ArcFace,
                double scale  = 64.0,
-               double margin = 0.5);
+               double margin = 0.5,
+               bool pretrained_=true);
 
     
     Loss::LossMetrics forward(const torch::Tensor& inputs,
