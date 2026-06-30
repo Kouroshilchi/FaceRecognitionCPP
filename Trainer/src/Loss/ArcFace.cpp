@@ -31,8 +31,8 @@ LossMetrics ArcFaceImpl::forward(const torch::Tensor& embeddings,
     auto one_hot = torch::zeros_like(cos_theta)
                        .scatter_(1, labels.view({-1, 1}), 1.0);
 
-    auto theta       = torch::acos(cos_theta);
-    auto cos_theta_m = torch::cos(theta + m_);
+    auto sin_theta   = torch::sqrt(torch::clamp(1.0 - cos_theta * cos_theta, 0.0, 1.0));
+    auto cos_theta_m = cos_theta * std::cos(m_) - sin_theta * std::sin(m_);
 
     const double threshold    = std::cos(M_PI - m_);
     const double mm           = std::sin(M_PI - m_) * m_;
