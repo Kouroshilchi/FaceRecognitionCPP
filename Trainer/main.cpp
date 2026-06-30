@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
 
         
         const int64_t P      = 32;   
-        const int64_t K      = 8;    
+        const int64_t K      = 4;    
         
 
         const int64_t embedding_dim = 128;
