@@ -103,11 +103,11 @@ int main(int argc, char* argv[]) {
         init_repo_root(argv[0]);
         std::cout << "Repo root: " << get_repo_root() << std::endl;
 
-        const std::string dataset_root = (get_repo_root() / "data" / "data_casia").string();
+        const std::string dataset_root = (get_repo_root() / "data" / "data_vgg2_casia").string();
 
         
-        const int64_t P      = 32;   
-        const int64_t K      = 8;    
+        const int64_t P      = 16;   
+        const int64_t K      = 10;    
         
 
         const int64_t embedding_dim = 128;
