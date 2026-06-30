@@ -10,7 +10,7 @@ namespace Loss
         auto dot = emb.matmul(emb.t());                  
         auto d2  = sq.unsqueeze(1) + sq.unsqueeze(0) - 2.0 * dot;
         d2 = torch::clamp_min(d2, 1e-12);
-        return torch::sqrt(d2);           
+        return d2;           
     }
 
     static std::pair<torch::Tensor, torch::Tensor>
@@ -58,7 +58,6 @@ namespace Loss
         auto chosen_neg = torch::where(has_semi, semi_hard_neg, hard_neg);
 
         auto losses = torch::relu(hardest_pos - chosen_neg + margin_);
-        // auto losses = torch::softplus(hardest_pos - chosen_neg);
 
         auto has_pos  = pos_mask.any(1);
         auto has_neg  = neg_mask.any(1);
@@ -118,7 +117,6 @@ namespace Loss
         auto hardest_neg = std::get<0>(dist_neg.min(1));      // [N]
 
         auto losses = torch::relu(hardest_pos - hardest_neg + margin_);
-        // auto losses = torch::softplus(hardest_pos - hardest_neg);
 
         auto has_pos = pos_mask.any(1);
         auto has_neg = neg_mask.any(1);
@@ -130,11 +128,27 @@ namespace Loss
         }
 
         auto losses_valid = losses.masked_select(valid);
-        auto hp_valid     = hardest_pos.masked_select(valid);
-        auto hn_valid     = hardest_neg.masked_select(valid);
 
-        double avg_pos_dist = hp_valid.mean().item<double>();
-        double avg_neg_dist = hn_valid.mean().item<double>();
+        auto pos_mask_f = pos_mask.to(dist.dtype());
+        auto neg_mask_f = neg_mask.to(dist.dtype());
+
+        auto pos_counts = pos_mask_f.sum(1);            // [N]
+        auto neg_counts = neg_mask_f.sum(1);            // [N]
+
+        auto dist_pos_sum = (dist * pos_mask_f).sum(1);  // [N]
+        auto dist_neg_sum = (dist * neg_mask_f).sum(1);  // [N]
+
+        auto safe_pos_counts = pos_counts.clamp_min(1);
+        auto safe_neg_counts = neg_counts.clamp_min(1);
+
+        auto mean_pos_per_anchor = dist_pos_sum / safe_pos_counts;  // [N]
+        auto mean_neg_per_anchor = dist_neg_sum / safe_neg_counts;  // [N]
+
+        auto mp_valid = mean_pos_per_anchor.masked_select(valid);
+        auto mn_valid = mean_neg_per_anchor.masked_select(valid);
+
+        double avg_pos_dist = mp_valid.mean().item<double>();
+        double avg_neg_dist = mn_valid.mean().item<double>();
 
         auto loss           = losses_valid.mean();
         int64_t zero_count  = losses_valid.eq(0).sum().item<int64_t>();
@@ -146,5 +160,4 @@ namespace Loss
         return {loss, avg_pos_dist, avg_neg_dist,
                 (int64_t)losses_valid.numel(), zero_count};
     }
-
 } // namespace Loss
