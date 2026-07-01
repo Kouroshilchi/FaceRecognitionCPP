@@ -108,21 +108,26 @@ int main(int argc, char* argv[]) {
         const std::string dataset_root = (get_repo_root() / "data" / "data_vgg2_casia").string();
 
         
-        const int64_t P                 = 32;   
-        const int64_t K                 =  4;    
-        const cv::Size image_size         {112, 112};
-        const int64_t embedding_dim     = 128;
-        const int64_t epochs            = 100;
-        int64_t log_step                = 100;
-        bool resume                     = false;
-        double model_lr                 = 1e-4;
-        double arcface_lr               = 1e-4;
-        double model_lastlayer_lr       = 1e-4;
-        model::LossType loss_type       = model::LossType::ArcFace;
-        std::string mining_mode         = "ArcFace";
-        bool pretrained_resnet          = true;
-        int64_t nan_loss_counter        = 0;
-        int64_t zero_triplet_counter    = 0;
+        const int64_t P                            = 32;   
+        const int64_t K                            =  4;    
+        const cv::Size image_size                    {112, 112};
+        const int64_t embedding_dim                = 128;
+        const int64_t epochs                       = 100;
+        int64_t log_step                           = 100;
+        bool resume                                = false;
+        double model_lr                            = 1e-4;
+        double arcface_lr                          = 1e-4;
+        double model_lastlayer_lr                  = 1e-4;
+        double loss_val_batch_mean                 = 0.0;
+        double avg_pos_metric_batch_mean           = 0.0;
+        double avg_neg_metric_batch_mean           = 0.0;
+        double gap_batch_mean                      = 0.0;
+        double num_zero_loss_triplets_batch_mean   = 0.0;
+        model::LossType loss_type                  = model::LossType::ArcFace;
+        std::string mining_mode                    = "ArcFace";
+        bool pretrained_resnet                     = true;
+        int64_t nan_loss_counter                   = 0;
+        int64_t zero_triplet_counter               = 0;
         std::vector<torch::Tensor> backbone_params, arcface_params, head_params;
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
         std::cout << "Using device: " << device << std::endl;
@@ -295,19 +300,27 @@ int main(int argc, char* argv[]) {
                 pos_dist_sum += metrics.avg_pos_metric;
                 neg_dist_sum += metrics.avg_neg_metric;
                 ++batch_index;
-
+                loss_val_batch_mean  += loss_val;
+                avg_pos_metric_batch_mean += metrics.avg_pos_metric;
+                avg_neg_metric_batch_mean += metrics.avg_neg_metric;
+                gap_batch_mean += (metrics.avg_neg_metric - metrics.avg_pos_metric);
+                num_zero_loss_triplets_batch_mean += metrics.num_zero_loss_triplets;
                 if (batch_index % log_step == 0) {
                     double gap = metrics.avg_neg_metric - metrics.avg_pos_metric;
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "(P=" << P << " x K=" << K << ") "
-                              << "Loss: "        << loss_val
-                              << " | Pos-dist: " << metrics.avg_pos_metric
-                              << " | Neg-dist: " << metrics.avg_neg_metric
-                              << " | Gap(N-P): " << gap
-                              << " | Valid-triplets: " << metrics.num_valid_triplets
-                              << " | Zero-triplets: " << metrics.num_zero_loss_triplets
+                              << "Loss: "        << (loss_val_batch_mean / log_step)
+                              << " | Pos-dist: " << (avg_pos_metric_batch_mean / log_step)
+                              << " | Neg-dist: " << (avg_neg_metric_batch_mean / log_step)
+                              << " | Gap(N-P): " << (gap_batch_mean / log_step)
+                              << " | Zero-triplets: " << (num_zero_loss_triplets_batch_mean / log_step)
                               << std::endl;
+                    loss_val_batch_mean = 0.0;
+                    avg_pos_metric_batch_mean = 0.0;
+                    avg_neg_metric_batch_mean = 0.0;
+                    gap_batch_mean = 0.0;
+                    num_zero_loss_triplets_batch_mean = 0.0;
                 }
 
                 if (batch_index % 1000 == 0) {
