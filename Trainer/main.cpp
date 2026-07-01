@@ -37,7 +37,6 @@ std::string getOsName()
     #endif
 }                      
 
-
 void init_repo_root(const char* argv0) {
     const char* env = std::getenv("REPO_ROOT");
     if (env && std::filesystem::exists(env)) {
@@ -56,15 +55,24 @@ void init_repo_root(const char* argv0) {
     }
 }
 
-std::filesystem::path get_repo_root()  { return g_repo_root; }
-std::string get_model_save_path()      { return (g_repo_root / "models" / "model.pt").string(); }
-std::string get_weights_path()         { return (g_repo_root / "models" / "resnet50_weights.pt").string(); }
+std::filesystem::path get_repo_root()  
+{ 
+    return g_repo_root; 
+}
+std::string get_model_save_path()      
+{ 
+    return (g_repo_root / "models" / "model.pt").string(); 
+}
+std::string get_weights_path()         
+{ 
+    return (g_repo_root / "models" / "resnet50_weights.pt").string(); 
+}
 
 void evaluate_lfw(model::FaceNet& facenet, torch::Device device) {
+    std::cout << "=================================================" << std::endl;
     try {
         auto lfw_root   = get_repo_root() / "data" / "data_LFW";
         auto pairs_file = lfw_root / "pairs.csv";
-
         if (!std::filesystem::exists(lfw_root)) {
             std::cerr << "[LFW] WARNING: LFW root not found: " << lfw_root << std::endl;
             return;
@@ -78,24 +86,18 @@ void evaluate_lfw(model::FaceNet& facenet, torch::Device device) {
         auto lfw_metrics = lfw_eval.Evaluate(0.0, 16, 500);
 
         std::cout << "[LFW] Total pairs    : " << lfw_metrics.total_pairs    << std::endl;
-        std::cout << "[LFW] Positive pairs : " << lfw_metrics.positive_pairs << std::endl;
-        std::cout << "[LFW] Negative pairs : " << lfw_metrics.negative_pairs << std::endl;
-        std::cout << "[LFW] Skipped pairs  : " << lfw_metrics.skipped_pairs  << std::endl;
-        std::cout << "[LFW] Best threshold : " << lfw_metrics.best_threshold  << std::endl;
+        std::cout << "[LFW] Accuracy (best thr=" << lfw_metrics.best_threshold << "): "
+                  << (lfw_metrics.accuracy * 100.0) << "%" << std::endl;
 
         if (lfw_metrics.total_pairs == 0) {
             std::cerr << "[LFW] ERROR: 0 pairs evaluated!" << std::endl;
             return;
         }
-
-        double best_thr = lfw_metrics.best_threshold;
-        auto final_metrics = lfw_eval.Evaluate(best_thr, 16, 500);
-        std::cout << "[LFW] Accuracy (best thr=" << best_thr << "): "
-                  << (final_metrics.accuracy * 100.0) << "%" << std::endl;
-
     } catch (const std::exception& e) {
         std::cerr << "[LFW] EXCEPTION: " << e.what() << std::endl;
     }
+    std::cout << "=================================================" << std::endl;
+
 }
 
 int main(int argc, char* argv[]) {
@@ -106,18 +108,22 @@ int main(int argc, char* argv[]) {
         const std::string dataset_root = (get_repo_root() / "data" / "data_vgg2_casia").string();
 
         
-        const int64_t P      = 32;   
-        const int64_t K      = 4;    
-        
-
-        const int64_t embedding_dim = 128;
-        const int64_t epochs        = 100;
-        const cv::Size image_size {112, 112};
-        bool pretrained_resnet = true;
-
-        int64_t nan_loss_counter  = 0;
-        int64_t zero_triplet_counter = 0;
-
+        const int64_t P                 = 32;   
+        const int64_t K                 =  4;    
+        const cv::Size image_size         {112, 112};
+        const int64_t embedding_dim     = 128;
+        const int64_t epochs            = 100;
+        int64_t log_step                = 100;
+        bool resume                     = false;
+        double model_lr                 = 1e-4;
+        double arcface_lr               = 1e-4;
+        double model_lastlayer_lr       = 1e-4;
+        model::LossType loss_type       = model::LossType::ArcFace;
+        std::string mining_mode         = "ArcFace";
+        bool pretrained_resnet          = true;
+        int64_t nan_loss_counter        = 0;
+        int64_t zero_triplet_counter    = 0;
+        std::vector<torch::Tensor> backbone_params, arcface_params, head_params;
         torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
         std::cout << "Using device: " << device << std::endl;
 
@@ -135,12 +141,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Batch config     : P=" << P << " classes x K=" << K << " images = " << sampler.batch_size() << " per batch" << std::endl;
         std::cout << "Batches per epoch: " << sampler.num_batches() << std::endl;
 
-        bool resume = false;
-        double model_lr    = 1e-4;
-        double arcface_lr  = 1e-4;
-        double model_lastlayer_lr = 1e-4;
-        model::LossType loss_type = model::LossType::ArcFace;
-        std::string loss_name = "arcface";
+
 
         for (int i = 1; i < argc; ++i) {
             if (std::string(argv[i]) == "--resume") {
@@ -155,6 +156,15 @@ int main(int argc, char* argv[]) {
                     ++i;
                 } else {
                     std::cerr << "Error: --model_lr requires a value" << std::endl;
+                    return 1;
+                }
+            }
+            else if (std::string(argv[i]) == "--log_step") {
+                if (i + 1 < argc) {
+                    log_step = std::stod(argv[i + 1]);
+                    ++i;
+                } else {
+                    std::cerr << "Error: --log_step requires a value" << std::endl;
                     return 1;
                 }
             }
@@ -180,15 +190,15 @@ int main(int argc, char* argv[]) {
                 if (i + 1 < argc) {
                     std::string value = argv[i + 1];
                     ++i;
-                    if (value == "arcface") {
+                    if (value == "ArcFace") {
                         loss_type = model::LossType::ArcFace;
-                        loss_name = value;
+                        mining_mode = "arcface";
                     } else if (value == "triplet_semi") {
                         loss_type = model::LossType::TripletSemiHard;
-                        loss_name = value;
-                    } else if (value == "triplet_hard" || value == "triplet") {
+                        mining_mode = "Triplet Semi";
+                    } else if (value == "triplet_hard") {
                         loss_type = model::LossType::TripletOnlineHard;
-                        loss_name = value;
+                        mining_mode = "Triplet Hard";
                     } else {
                         std::cerr << "Error: unknown loss type '" << value << "'. "
                                   << "Supported values: arcface, triplet_semi, triplet_hard" << std::endl;
@@ -210,11 +220,11 @@ int main(int argc, char* argv[]) {
             std::cout << "Training from scratch with model_lr=" << model_lr
                       << " model_lastlayer_lr=" << model_lastlayer_lr
                       << " arcface_lr=" << arcface_lr
-                      << " loss=" << loss_name << std::endl;
+                      << " loss=" << mining_mode << std::endl;
         }
         facenet->to(device);
         facenet->train();
-        std::vector<torch::Tensor> backbone_params, arcface_params, head_params;
+
         for (auto& p : facenet->backbone->projector->parameters()) backbone_params.push_back(p);
         
         for (auto& p : facenet->arcface->parameters())  arcface_params.push_back(p);
@@ -230,27 +240,27 @@ int main(int argc, char* argv[]) {
 
         
         for (int64_t epoch = 1; epoch <= epochs; ++epoch) {
-            facenet->train();
-
-            std::string mining_mode = "Hard";
-            std::cout << "\n=== Epoch " << epoch << "/" << epochs
-                      << " | Mining: " << mining_mode
-                      << " | P=" << P << " K=" << K << " ===" << std::endl;
-
+            
             double  epoch_loss       = 0.0;
             int64_t batch_index      = 0;
             double  pos_dist_sum     = 0.0;
             double  neg_dist_sum     = 0.0;
-            int64_t total_batches    = sampler.num_batches();
+            
+            facenet->train();
+            std::cout << "\n=== Epoch " << epoch << "/" << epochs
+                      << " | Mining: " << mining_mode
+                      << " | P=" << P << " K=" << K << " ===" << std::endl;
 
+
+            int64_t total_batches    = sampler.num_batches();
             for (int64_t b = 0; b < total_batches; ++b) {
 
                 
                 auto indices = sampler.next_batch();
-
-                
                 std::vector<torch::Tensor> batch_images;
                 std::vector<torch::Tensor> batch_labels;
+
+                
                 batch_images.reserve(indices.size());
                 batch_labels.reserve(indices.size());
 
@@ -286,7 +296,7 @@ int main(int argc, char* argv[]) {
                 neg_dist_sum += metrics.avg_neg_metric;
                 ++batch_index;
 
-                if (batch_index % 10 == 0) {
+                if (batch_index % log_step == 0) {
                     double gap = metrics.avg_neg_metric - metrics.avg_pos_metric;
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
@@ -300,7 +310,7 @@ int main(int argc, char* argv[]) {
                               << std::endl;
                 }
 
-                if (batch_index % 500 == 0) {
+                if (batch_index % 1000 == 0) {
                     torch::save(facenet, get_model_save_path());
                     std::cout << "Checkpoint saved." << std::endl;
                 }
@@ -324,14 +334,7 @@ int main(int argc, char* argv[]) {
             scheduler_facenet.step();
 
             torch::save(facenet, get_model_save_path());
-            std::cout << "Model saved." << std::endl;
-
-            if (epoch % 10 == 0) {
-                auto epoch_path = get_repo_root() / "models" /
-                                  ("model_epoch_" + std::to_string(epoch) + ".pt");
-                torch::save(facenet, epoch_path.string());
-                std::cout << "Epoch checkpoint: " << epoch_path << std::endl;
-            }
+            std::cout << "Model saved at : " << get_model_save_path() << std::endl;
 
             std::cout << "================================\n" << std::endl;
 
