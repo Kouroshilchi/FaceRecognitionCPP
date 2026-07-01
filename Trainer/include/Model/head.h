@@ -14,7 +14,7 @@ namespace model {
         torch::nn::Linear fc1{nullptr};
         torch::nn::BatchNorm1d bn1_fc1{nullptr};
         torch::nn::Linear fc2{nullptr};
-        
+        torch::nn::ReLU relu{nullptr};
     };
     TORCH_MODULE(FaceRecognitionHead);
 }
