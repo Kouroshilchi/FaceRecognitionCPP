@@ -1,11 +1,12 @@
 #include "../include/Dataset/Dataset.h"
+#include <random>
 
 namespace fs = std::filesystem;
 
 namespace dataset {
 
-FaceDataset::FaceDataset(const std::string& root_dir, const cv::Size& image_size)
-    : image_size_(image_size) {
+FaceDataset::FaceDataset(const std::string& root_dir, const cv::Size& image_size, bool augment)
+    : image_size_(image_size), augment_(augment) {
     scan_directory(root_dir);
     
     if (num_classes() < 2) {
@@ -70,6 +71,72 @@ bool FaceDataset::is_image_file(const fs::path& path) const {
     return std::find(extensions.begin(), extensions.end(), ext) != extensions.end();
 }
 
+// ---------------------------------------------------------------------
+// Augmentation helpers
+// ---------------------------------------------------------------------
+
+namespace {
+std::mt19937& rng() {
+    static thread_local std::mt19937 generator(std::random_device{}());
+    return generator;
+}
+
+float uniform(float lo, float hi) {
+    std::uniform_real_distribution<float> dist(lo, hi);
+    return dist(rng());
+}
+
+bool with_probability(float p) {
+    return uniform(0.0f, 1.0f) < p;
+}
+}  // namespace
+
+void FaceDataset::random_rotate(cv::Mat& image, float max_angle_deg) const {
+    if (!with_probability(0.5f)) return;
+
+    float angle = uniform(-max_angle_deg, max_angle_deg);
+    cv::Point2f center(image.cols / 2.0f, image.rows / 2.0f);
+    cv::Mat rot_mat = cv::getRotationMatrix2D(center, angle, 1.0);
+    cv::warpAffine(image, image, rot_mat, image.size(),
+                   cv::INTER_LINEAR, cv::BORDER_REFLECT101);
+}
+
+void FaceDataset::random_horizontal_flip(cv::Mat& image) const {
+    if (!with_probability(0.5f)) return;
+    cv::flip(image, image, 1);
+}
+
+void FaceDataset::random_brightness_contrast(cv::Mat& image,
+                                              float contrast_range,
+                                              float brightness_range) const {
+    if (!with_probability(0.5f)) return;
+
+    float alpha = uniform(1.0f - contrast_range, 1.0f + contrast_range); 
+    float beta  = uniform(-brightness_range, brightness_range);      
+    image.convertTo(image, -1, alpha, beta);
+}
+
+void FaceDataset::random_translate(cv::Mat& image, float max_shift_ratio) const {
+    if (!with_probability(0.5f)) return;
+
+    float max_dx = image.cols * max_shift_ratio;
+    float max_dy = image.rows * max_shift_ratio;
+    float dx = uniform(-max_dx, max_dx);
+    float dy = uniform(-max_dy, max_dy);
+
+    cv::Mat translation_mat = (cv::Mat_<double>(2, 3) << 1, 0, dx, 0, 1, dy);
+    cv::warpAffine(image, image, translation_mat, image.size(),
+                   cv::INTER_LINEAR, cv::BORDER_REFLECT101);
+}
+
+void FaceDataset::apply_augmentations(cv::Mat& image) const {
+    random_rotate(image, 15.0f);
+    random_horizontal_flip(image);
+    random_translate(image, 0.05f);
+    random_brightness_contrast(image, 0.2f, 15.0f);
+}
+
+
 torch::Tensor FaceDataset::load_image(const std::string& path) const {
     cv::Mat image = cv::imread(path, cv::IMREAD_COLOR);
     if (image.empty()) {
@@ -77,8 +144,13 @@ torch::Tensor FaceDataset::load_image(const std::string& path) const {
     }
 
     cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
+
+    if (augment_) {
+        apply_augmentations(image);
+    }
+
     cv::resize(image, image, image_size_);
-    
+
     image.convertTo(image, CV_32F, 1.0 / 255.0);
 
     auto tensor = torch::from_blob(image.data, {image.rows, image.cols, 3}, torch::kFloat32);
@@ -118,4 +190,16 @@ int64_t FaceDataset::num_classes() const noexcept {
     return static_cast<int64_t>(classes_.size());
 }
 
+const std::vector<std::pair<std::string, int64_t>>& FaceDataset::samples() const noexcept {
+    return samples_;
 }
+
+void FaceDataset::set_augment(bool augment) noexcept {
+    augment_ = augment;
+}
+
+bool FaceDataset::is_augment_enabled() const noexcept {
+    return augment_;
+}
+
+}  // namespace dataset
