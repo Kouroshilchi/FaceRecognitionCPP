@@ -20,8 +20,7 @@ struct FaceNetImpl : torch::nn::Module {
                LossType loss_type = LossType::ArcFace,
                double scale  = 64.0,
                double margin = 0.5,
-               bool pretrained_=true, 
-               bool arcface_=false);
+               bool pretrained_=true);
 
     
     Loss::LossMetrics forward(const torch::Tensor& inputs,
@@ -33,9 +32,9 @@ struct FaceNetImpl : torch::nn::Module {
                               int64_t epoch = 1);
     torch::Tensor embed(const torch::Tensor& inputs);
     model::FaceRecognitionModel backbone{nullptr};
-    Loss::ArcFace               arcface{nullptr};
     Loss::TripletLoss           triplet{nullptr};
-    LossType                    default_loss_type{LossType::ArcFace};
+    Loss::ArcFace               arcface{nullptr};
+    LossType                    default_loss_type{LossType::TripletOnlineHard};
 };
 
 TORCH_MODULE(FaceNet);

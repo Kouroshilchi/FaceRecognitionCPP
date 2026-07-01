@@ -8,13 +8,12 @@ FaceNetImpl::FaceNetImpl(int64_t num_classes,
                          LossType loss_type,
                          double  scale,
                          double  margin , 
-                         bool pretrained_ , 
-                         bool arcface_)
+                         bool pretrained_)
     : default_loss_type(loss_type) {
     backbone = register_module("backbone", FaceRecognitionModel(3, embedding_dim , pretrained_));
-    if (arcface_ == true){
-        Loss::ArcFace arcface = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
-    }
+    
+    arcface = register_module("arcface",  Loss::ArcFace(num_classes, embedding_dim, scale, margin));
+    
     triplet  = register_module("triplet",  Loss::TripletLoss(0.3));
 }
 

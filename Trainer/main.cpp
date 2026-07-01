@@ -201,7 +201,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        auto facenet = model::FaceNet(num_classes, embedding_dim, loss_type, 64.0, 0.5 , pretrained_resnet, (loss_type == model::LossType::ArcFace));
+        auto facenet = model::FaceNet(num_classes, embedding_dim, loss_type, 64.0, 0.5 , pretrained_resnet);
 
         if (resume) {
             torch::load(facenet, get_model_save_path());
