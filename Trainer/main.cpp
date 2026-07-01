@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
         init_repo_root(argv[0]);
         std::cout << "Repo root: " << get_repo_root() << std::endl;
 
-        const std::string dataset_root = (get_repo_root() / "data" / "data_casia").string();
+        const std::string dataset_root = (get_repo_root() / "data" / "data_vgg2_casia").string();
 
         
         const int64_t P      = 32;   
@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Using device: " << device << std::endl;
 
         std::cout << "Loading dataset from: " << dataset_root << std::endl;
-        auto raw_dataset = dataset::FaceDataset(dataset_root, image_size);
+        auto raw_dataset = dataset::FaceDataset(dataset_root, image_size, true);
         const int64_t num_classes  = raw_dataset.num_classes();
         const size_t  dataset_size = raw_dataset.size().value();
 
