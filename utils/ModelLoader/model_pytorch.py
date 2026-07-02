@@ -158,7 +158,6 @@ def _normalize_state_dict(state_dict):
     if isinstance(state_dict, dict):
         normalized = {}
         for key, value in state_dict.items():
-            print(key)
             if key.startswith("backbone."):
                 key = key [len("backbone."):]
             normalized[key] = value
