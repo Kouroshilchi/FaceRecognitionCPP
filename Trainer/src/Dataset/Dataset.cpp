@@ -145,7 +145,7 @@ torch::Tensor FaceDataset::load_image(const std::string& path) const {
 
     cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
 
-    if (augment_) {
+    if ((augment_) && (!with_probability(0.5f))) {
         apply_augmentations(image);
     }
 
