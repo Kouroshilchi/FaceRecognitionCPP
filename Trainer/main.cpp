@@ -15,12 +15,15 @@
 #include <map>
 #include <cstdlib>
 #include <filesystem>
+#include <windows.h>
 
 static std::filesystem::path g_repo_root;
+
 
 std::string getOsName()
 {
     #ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
     return "Windows 32-bit";
     #elif _WIN64
     return "Windows 64-bit";
@@ -123,8 +126,8 @@ int main(int argc, char* argv[]) {
         double avg_neg_metric_batch_mean           = 0.0;
         double gap_batch_mean                      = 0.0;
         double num_zero_loss_triplets_batch_mean   = 0.0;
-        std::string bar_string_                     = "";
-        std::string bar_string                     = "";
+        std::string bar_string_                    = "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░";
+        std::string bar_string                     = "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░";
         model::LossType loss_type                  = model::LossType::ArcFace;
         std::string mining_mode                    = "ArcFace";
         bool pretrained_resnet                     = true;
@@ -258,7 +261,7 @@ int main(int argc, char* argv[]) {
                       << " | Mining: " << mining_mode
                       << " | P=" << P << " K=" << K << " ===" << std::endl;
 
-            std::cout << "\r" << "Progress: [" << bar_string << "] " << std::flush;
+            std::cout << "\r" << "Progress: |" << bar_string << "|" << std::flush;
 
             int64_t total_batches    = sampler.num_batches();
             for (int64_t b = 0; b < total_batches; ++b) {
@@ -288,9 +291,7 @@ int main(int argc, char* argv[]) {
                 double loss_val = loss.item<double>();
 
                 if (!std::isfinite(loss_val)) {
-                    std::cout <<  "\r"  << std::flush;
                     std::cerr << "Warning: non-finite loss at batch " << batch_index << ": " << loss_val << std::endl;
-                    std::cout << "\r" << "Progress: [" << bar_string << "] " << std::flush;
                     nan_loss_counter++;
                     ++batch_index;
                     continue;
@@ -313,14 +314,23 @@ int main(int argc, char* argv[]) {
                 if (batch_index % (total_batches / 50) == 0 || batch_index == total_batches) {
                     int progress = static_cast<int>(100.0 * batch_index / total_batches);
                     bar_string_ = bar_string;
-                    bar_string = std::string(progress / 2, '=') + std::string(50 - progress / 2, ' ');
+                    bar_string = "";
+                    for (int i=0; i < (progress / 2) ; i++)
+                    {
+                        bar_string += "█";
+                    }
+                    for (int i=0; i < (50 - progress / 2); i++)
+                    {
+                        bar_string += "░";
+                    }
                 }
                 if (bar_string_ != bar_string){
-                    std::cout << "\r" << "Progress: [" << bar_string << "] " << std::flush;
+                    std::cout << "\r" << "Progress: |" << bar_string << "|" << std::flush;
+                    bar_string_ = bar_string;
                 }
                 if (batch_index % log_step == 0) {
                     double gap = metrics.avg_neg_metric - metrics.avg_pos_metric;
-                    std::cout <<  "\r"  << std::flush;
+                    std::cout << "\r" << std::string(200, ' ') << "\r" << std::flush;
                     std::cout << "Epoch [" << epoch << "/" << epochs << "] "
                               << "Batch [" << batch_index << "/" << total_batches << "] "
                               << "(P=" << P << " x K=" << K << ") "
@@ -330,7 +340,7 @@ int main(int argc, char* argv[]) {
                               << " | Gap(N-P): " << (gap_batch_mean / log_step)
                               << " | Zero-triplets: " << (num_zero_loss_triplets_batch_mean / log_step)
                               << std::endl;
-                    std::cout << "\r" << "Progress: [" << bar_string << "] " << std::flush;
+                    std::cout << "\r" << "Progress: |" << bar_string << "| " << std::flush;
                     loss_val_batch_mean = 0.0;
                     avg_pos_metric_batch_mean = 0.0;
                     avg_neg_metric_batch_mean = 0.0;
@@ -339,17 +349,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (batch_index % 1000 == 0) {
-                    std::cout <<  "\r"  << std::flush;
+                    std::cout << "\r" << std::string(200, ' ') << "\r" << std::flush;
                     torch::save(facenet, get_model_save_path());
                     std::cout << "Checkpoint saved." << std::endl;
-                    std::cout << "\r" << "Progress: [" << bar_string << "] " << std::flush;
+                    std::cout << "\r" << "Progress: |" << bar_string << "|" << std::flush;
                 }
             }
 
             double avg_loss     = batch_index > 0 ? epoch_loss    / batch_index : 0.0;
             double avg_pos_dist = batch_index > 0 ? pos_dist_sum  / batch_index : 0.0;
             double avg_neg_dist = batch_index > 0 ? neg_dist_sum  / batch_index : 0.0;
-            std::cout <<  "\r"  << std::flush;
+            std::cout << "\r" << std::string(200, ' ') << "\r" << std::flush;
             std::cout << "\n=== Epoch " << epoch << " Summary ===" << std::endl;
             std::cout << "Mining mode      : " << mining_mode                   << std::endl;
             std::cout << "Batch config     : P=" << P << " x K=" << K           << std::endl;
