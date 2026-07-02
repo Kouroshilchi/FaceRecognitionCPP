@@ -28,8 +28,7 @@ int main(int argc, char* argv[]) {
             : get_default_dataset_root(repo_root).string();
 
         const int64_t embedding_dim = 256;
-        const double dropout = 0.1;
-        const double scale = 30.0;
+        const double scale = 64.0;
         const double margin = 0.5;
         const cv::Size image_size{112, 112};
 
@@ -39,7 +38,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Detected classes: " << num_classes << std::endl;
 
         std::cout << "Loading model..." << std::endl;
-        auto model = model::FaceNet(num_classes, embedding_dim, dropout, scale, margin);
+        auto model = model::FaceNet(num_classes, embedding_dim);
         const auto model_path = repo_root / "models" / "model.pt";
         torch::load(model, model_path.string());
         model->eval();
