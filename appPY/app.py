@@ -102,39 +102,150 @@ class FaceRecognitionApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Face Recognition App")
-        self.geometry("1080x1080")
+        self.geometry("1920x1000")
+        self.state('zoomed')
 
-        self.video_label   = tk.Label(self)
-        self.video_label.pack(pady=20)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-        self.status_label  = ctk.CTkLabel(self, text="Status: Idle")
-        self.status_label.pack(pady=10)
+        self.main_frame = ctk.CTkFrame(self)
+        self.main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
+        self.main_frame.grid_rowconfigure(0, weight=1)
+        self.main_frame.grid_rowconfigure(1, weight=0)
+        self.main_frame.grid_columnconfigure(0, weight=3)
+        self.main_frame.grid_columnconfigure(1, weight=1)
 
-        self.start_button  = ctk.CTkButton(self, text="Start Live Detection", command=self.start_detection)
-        self.start_button.pack(pady=10)
+        self.video_frame = ctk.CTkFrame(self.main_frame)
+        self.video_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        self.video_frame.grid_rowconfigure(0, weight=1)
+        self.video_frame.grid_columnconfigure(0, weight=1)
+        self.video_frame.grid_propagate(False)
 
-        self.stop_button   = ctk.CTkButton(self, text="Stop Detection", command=self.stop_detection, state=tk.DISABLED)
-        self.stop_button.pack(pady=10)
+        self.video_label = tk.Label(self.video_frame, bg='black')
+        self.video_label.grid(row=0, column=0, sticky="nsew")
+        
 
-        self.add_face_button = ctk.CTkButton(self, text="Add New Face from Folder", command=self.add_new_face)
-        self.add_face_button.pack(pady=10)
+        self.log_frame = ctk.CTkFrame(self.main_frame)
+        self.log_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        self.log_frame.grid_rowconfigure(0, weight=0) 
+        self.log_frame.grid_rowconfigure(1, weight=1)  
+        self.log_frame.grid_columnconfigure(0, weight=1)
 
-        self.add_treshold  = ctk.CTkEntry(self, placeholder_text='threshold (default: 0.7)')
-        self.add_treshold.pack(pady=10)
+        self.log_title = ctk.CTkLabel(
+            self.log_frame,
+            text="📋 Detection Log",
+            font=("Arial", 16, "bold")
+        )
+        self.log_title.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
 
-        self.set_treshold_button = ctk.CTkButton(self, text="Set Threshold", command=self.set_threshold)
-        self.set_treshold_button.pack(pady=10)
+        self.log_textbox = ctk.CTkTextbox(
+            self.log_frame,
+            font=("Arial", 30),
+            wrap="word"
+        )
+        self.log_textbox.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.log_textbox.configure(state="disabled")
 
-        self.cap     = None
+        self.controls_frame = ctk.CTkFrame(self.main_frame)
+        self.controls_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        self.controls_frame.grid_columnconfigure(0, weight=1)
+        self.controls_frame.grid_columnconfigure(1, weight=1)
+        self.controls_frame.grid_columnconfigure(2, weight=1)
+        self.controls_frame.grid_columnconfigure(3, weight=1)
+
+        self.status_label = ctk.CTkLabel(
+            self.controls_frame,
+            text="⚪ Status: Idle",
+            font=("Arial", 14, "bold"),
+            text_color="gray"
+        )
+        self.status_label.grid(row=0, column=0, columnspan=4, pady=(10, 5))
+
+        button_frame = ctk.CTkFrame(self.controls_frame, fg_color="transparent")
+        button_frame.grid(row=1, column=0, columnspan=4, sticky="ew", pady=5)
+        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
+        button_frame.grid_columnconfigure(2, weight=1)
+        button_frame.grid_columnconfigure(3, weight=1)
+        self.start_button = ctk.CTkButton(
+            button_frame,
+            text="▶ Start Detection",
+            command=self.start_detection,
+            font=("Arial", 12),
+            width=150
+        )
+        self.start_button.grid(row=0, column=0, padx=5, pady=5)
+
+        self.stop_button = ctk.CTkButton(
+            button_frame,
+            text="⏹ Stop Detection",
+            command=self.stop_detection,
+            state=tk.DISABLED,
+            font=("Arial", 12),
+            width=150
+        )
+        self.stop_button.grid(row=0, column=1, padx=5, pady=5)
+
+        self.add_face_button = ctk.CTkButton(
+            button_frame,
+            text="📁 Add Face from Folder",
+            command=self.add_new_face,
+            font=("Arial", 12),
+            width=180
+        )
+        self.add_face_button.grid(row=0, column=2, padx=5, pady=5)
+
+        threshold_frame = ctk.CTkFrame(button_frame, fg_color="transparent")
+        threshold_frame.grid(row=0, column=3, padx=5, pady=5)
+        
+        self.add_treshold = ctk.CTkEntry(
+            threshold_frame,
+            placeholder_text='Threshold (0.7)',
+            font=("Arial", 11),
+            width=100
+        )
+        self.add_treshold.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.set_treshold_button = ctk.CTkButton(
+            threshold_frame,
+            text="Set",
+            command=self.set_threshold,
+            font=("Arial", 11),
+            width=60,
+        )
+        self.set_treshold_button.pack(side=tk.LEFT)
+
+        self.cap = None
         self.running = False
-        self.tresh   = 0.7
+        self.tresh = 0.7
         
         self.update_idle()
+    
+    def add_log(self, message, tag="info"):
+        self.log_textbox.configure(state="normal")
+        
+        if tag == "info":
+            color = "#00FF00"  
+        elif tag == "warning":
+            color = "#FFFF00" 
+        elif tag == "error":
+            color = "#FF0000" 
+        elif tag == "detection":
+            color = "#00BFFF" 
+        else:
+            color = "#FFFFFF"  
+        
+        self.log_textbox.insert("end", f" {message} \n")
+        
+        self.log_textbox.see("end")
+        
+        self.log_textbox.configure(state="disabled")
 
     def start_detection(self):
         if self.running:
             return
         try:
+            self.add_log("🚀 Starting camera...", "info")
             self.cap = cv2.VideoCapture(0)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 900)
@@ -149,6 +260,7 @@ class FaceRecognitionApp(ctk.CTk):
             self.update_frame()
 
         except Exception as e:
+            self.add_log(f"❌ Failed to start camera: {e}", "error")
             messagebox.showerror("Error", f"Failed to start camera: {e}")
             self.status_label.configure(text="Status: Error")
 
@@ -163,6 +275,7 @@ class FaceRecognitionApp(ctk.CTk):
         self.stop_button.configure(state=tk.DISABLED)
         self.status_label.configure(text="Status: Idle")
         self.video_label.configure(image=None)
+        self.add_log("⏹ Detection stopped", "info")
 
     def update_frame(self):
         if not self.running:
@@ -190,6 +303,10 @@ class FaceRecognitionApp(ctk.CTk):
                         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                         cv2.putText(frame, name,          (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
                         cv2.putText(frame, f"{prob:.1f}%",(x, y-40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                        
+                        if name != "Unknown" and prob > 50:
+                            # self.add_log(f"✅ Recognized: {name} ({prob:.1f}%)", "detection")
+                            pass
 
                 img   = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 imgtk = ImageTk.PhotoImage(image=img)
@@ -197,7 +314,7 @@ class FaceRecognitionApp(ctk.CTk):
                 self.video_label.configure(image=imgtk)
                 
         except Exception as e:
-            print(f"Video error: {e}")
+            self.add_log(f"❌ Video error: {e}", "error")
             self.stop_detection()
             return
         
@@ -209,12 +326,16 @@ class FaceRecognitionApp(ctk.CTk):
             self.after(100, self.update_idle)
 
     def add_new_face(self):
+        self.add_log("📁 Starting add face process", "info")
+        
         name = ctk.CTkInputDialog(text="Enter the name:", title="Add Face").get_input()
         if not name:
+            self.add_log("❌ No name entered", "warning")
             return
 
         folder_path = filedialog.askdirectory(title="Select Folder with Images")
         if not folder_path:
+            self.add_log("❌ No folder selected", "warning")
             return
 
         try:
@@ -257,16 +378,20 @@ class FaceRecognitionApp(ctk.CTk):
             with open(db_path, 'wb') as f:
                 pickle.dump({'known_embeddings': known_embeddings, 'known_names': known_names}, f)
 
+            self.add_log(f"✅ '{name}' added from {len(embeddings)} images", "info")
             messagebox.showinfo("Success", f"'{name}' added from {len(embeddings)} images.")
 
         except Exception as e:
+            self.add_log(f"❌ Error adding face: {e}", "error")
             messagebox.showerror("Error", str(e))
 
     def set_threshold(self):
         try:
             self.tresh = float(self.add_treshold.get())
+            self.add_log(f"✅ Threshold set to {self.tresh}", "info")
             self.status_label.configure(text=f"Status: Threshold set to {self.tresh}")
         except ValueError:
+            self.add_log("❌ Invalid threshold value", "error")
             messagebox.showerror("Error", "Please enter a valid number for threshold")
 
 if __name__ == "__main__":
