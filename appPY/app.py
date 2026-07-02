@@ -9,7 +9,6 @@ from torchvision import transforms
 import os
 import pickle
 import mediapipe as mp
-import threading
 import faiss
 import sys
 from pathlib import Path
@@ -22,9 +21,7 @@ from model_pytorch import load_model
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
 try:
-
     for candidate in ['model_weights.pt', '../models/model_weights.pt' ,r"C:\Users\kuoro\Documents\GitHub\FaceRecognitionCPP\models\model_weights.pt"]:
         if os.path.exists(candidate):
             model = load_model(candidate, device)
@@ -34,7 +31,6 @@ try:
 except Exception as e:
     print(f"Error loading model: {e}")
     exit(1)
-
 
 transform = transforms.Compose([
     transforms.Resize((112, 112)),
@@ -64,7 +60,6 @@ except Exception as e:
 mp_face_detection = mp.solutions.face_detection
 face_detection    = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
 
-
 def get_embedding(face_img):
     try:
         if face_img is None or face_img.size == 0:
@@ -73,12 +68,10 @@ def get_embedding(face_img):
         face_tensor = transform(face_pil).unsqueeze(0).to(device)
         with torch.no_grad():
             emb = model(face_tensor)
-        # emb = torch.nn.functional.normalize(emb, p=2, dim=1)
         return emb
     except Exception as e:
         print(f"Embedding error: {e}")
         return None
-
 
 def compare_embedding(emb, threshold=0.7, k=3):
     if emb is None or index.ntotal == 0:
@@ -86,8 +79,6 @@ def compare_embedding(emb, threshold=0.7, k=3):
 
     emb_np = emb.cpu().numpy().astype('float32')        
     distances, indices = index.search(emb_np, k=k)
-    
-    # print(f"Raw distances: {distances}")  
     
     class_sims = {}
     for dist, idx in zip(distances[0], indices[0]):
@@ -101,8 +92,6 @@ def compare_embedding(emb, threshold=0.7, k=3):
         avg = float(np.mean(sims))
         if avg > best_sim:
             best_sim, best_name = avg, name
-
-    # print(f"best_sim: {best_sim}, best_name: {best_name}")
     
     if best_sim > threshold:
         similarity_percentage = best_sim * 100
@@ -136,17 +125,16 @@ class FaceRecognitionApp(ctk.CTk):
         self.set_treshold_button = ctk.CTkButton(self, text="Set Threshold", command=self.set_threshold)
         self.set_treshold_button.pack(pady=10)
 
-
         self.cap     = None
         self.running = False
-        self.thread  = None
         self.tresh   = 0.7
+        
+        self.update_idle()
 
     def start_detection(self):
         if self.running:
             return
         try:
-
             self.cap = cv2.VideoCapture(0)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 900)
@@ -157,8 +145,9 @@ class FaceRecognitionApp(ctk.CTk):
             self.start_button.configure(state=tk.DISABLED)
             self.stop_button.configure(state=tk.NORMAL)
             self.status_label.configure(text="Status: Running")
-            self.thread = threading.Thread(target=self.update_video, daemon=True)
-            self.thread.start()
+            
+            self.update_frame()
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start camera: {e}")
             self.status_label.configure(text="Status: Error")
@@ -175,13 +164,13 @@ class FaceRecognitionApp(ctk.CTk):
         self.status_label.configure(text="Status: Idle")
         self.video_label.configure(image=None)
 
-    def update_video(self):
-        while self.running:
-            try:
-                ret, frame = self.cap.read()
-                if not ret:
-                    break
-
+    def update_frame(self):
+        if not self.running:
+            return
+            
+        try:
+            ret, frame = self.cap.read()
+            if ret:
                 rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 res   = face_detection.process(rgb)
                 ih, iw, _ = frame.shape
@@ -206,12 +195,18 @@ class FaceRecognitionApp(ctk.CTk):
                 imgtk = ImageTk.PhotoImage(image=img)
                 self.video_label.imgtk = imgtk
                 self.video_label.configure(image=imgtk)
+                
+        except Exception as e:
+            print(f"Video error: {e}")
+            self.stop_detection()
+            return
+        
+        if self.running:
+            self.after(5, self.update_frame)
 
-            except Exception as e:
-                print(f"Video error: {e}")
-                break
-
-        self.stop_detection()
+    def update_idle(self):
+        if not self.running:
+            self.after(100, self.update_idle)
 
     def add_new_face(self):
         name = ctk.CTkInputDialog(text="Enter the name:", title="Add Face").get_input()
@@ -268,8 +263,11 @@ class FaceRecognitionApp(ctk.CTk):
             messagebox.showerror("Error", str(e))
 
     def set_threshold(self):
-
-        self.tresh = float(self.add_treshold.get())
+        try:
+            self.tresh = float(self.add_treshold.get())
+            self.status_label.configure(text=f"Status: Threshold set to {self.tresh}")
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid number for threshold")
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("dark")
