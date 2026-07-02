@@ -13,7 +13,7 @@
 #include <fstream>
 #include <array>
 #include <filesystem>
-#include "../Trainer/include/Model/Model.h"
+#include "../Trainer/include/Model/FaceNet.h"
 
 using namespace cv;
 static torch::Device g_device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
@@ -23,8 +23,66 @@ static const std::array<float, 3> kImageStd  = {0.229f, 0.224f, 0.225f};
 namespace paths {
     const std::string embeds_file = "embeddings.pt";
     const std::string names_file  = "names.pt";
-    const std::string haarcascade = "C:\\libs\\opencv\\sources\\data\\haarcascades_cuda\\haarcascade_frontalface_alt.xml";
-    const std::string model_file  = "C:\\Users\\kuoro\\Documents\\GitHub\\FaceRecognitionCPP\\models\\model.pt";
+    const std::string haarcascade = "haarcascade_frontalface_alt.xml";
+}
+
+std::filesystem::path get_repo_root()
+{
+    return std::filesystem::path(__FILE__).parent_path().parent_path();
+}
+
+std::filesystem::path get_model_path()
+{
+    const auto repo_root = get_repo_root();
+    std::filesystem::path candidates[] = {
+        repo_root / "models" / "model.pt",
+        std::filesystem::current_path() / "models" / "model.pt",
+        repo_root / "build" / "Release" / "model.pt"
+    };
+
+    for (const auto& candidate : candidates) {
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+
+    return candidates[0];
+}
+
+int64_t count_dataset_classes(const std::filesystem::path& root)
+{
+    if (!std::filesystem::exists(root)) {
+        return 1;
+    }
+
+    int64_t count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(root)) {
+        if (entry.is_directory()) {
+            ++count;
+        }
+    }
+
+    return count > 0 ? count : 1;
+}
+
+bool load_face_cascade(CascadeClassifier& cascade, std::string& log)
+{
+    const std::vector<std::string> candidates = {
+        paths::haarcascade,
+        (get_repo_root() / "models" / paths::haarcascade).string(),
+        (get_repo_root() / "data" / paths::haarcascade).string(),
+        "C:/opencv/build/etc/haarcascades/haarcascade_frontalface_alt.xml",
+        "C:/libs/opencv/build/etc/haarcascades/haarcascade_frontalface_alt.xml"
+    };
+
+    for (const auto& candidate : candidates) {
+        if (cascade.load(candidate)) {
+            return true;
+        }
+        log += "Failed to load cascade from: " + candidate + "\n";
+    }
+
+    return false;
 }
 
 class Faces
@@ -143,7 +201,7 @@ static torch::Tensor g_lastEmbedding;
 static bool g_lastFaceValid = false;
 
 void process_frame(Mat& frame, CascadeClassifier& face_cascade,
-                    model::FaceRecognitionModel& model, Faces& face_processor)
+                    model::FaceNet& model, Faces& face_processor)
 {
     Mat gray;
     cvtColor(frame, gray, COLOR_BGR2GRAY);
@@ -151,8 +209,6 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
     face_cascade.detectMultiScale(gray, faces);
 
     g_lastFaceValid = false;
-
-    torch::NoGradGuard no_grad;
 
     for (const auto& face : faces) {
         Mat faceROI = frame(face).clone();
@@ -162,12 +218,14 @@ void process_frame(Mat& frame, CascadeClassifier& face_cascade,
 
         auto tensor = torch::from_blob(faceROI.data, {faceROI.rows, faceROI.cols, 3}, torch::kFloat32);
         tensor = tensor.permute({2, 0, 1}).clone().unsqueeze(0);
-        tensor[0][0] = (tensor[0][0] - kImageMean[0]) / kImageStd[0];
-        tensor[0][1] = (tensor[0][1] - kImageMean[1]) / kImageStd[1];
-        tensor[0][2] = (tensor[0][2] - kImageMean[2]) / kImageStd[2];
+        auto normalize = torch::data::transforms::Normalize<>(
+            std::vector<double>{0.485, 0.456, 0.406},
+            std::vector<double>{0.229, 0.224, 0.225}
+        );
+        tensor = normalize(tensor);
         tensor = tensor.to(g_device);
 
-        torch::Tensor embed_ = model->forward(tensor);
+        torch::Tensor embed_ = model->embed(tensor);
         float confidence = 0.0;
         std::string name = face_processor.search_faces(embed_ ,0.7 , confidence);
 
@@ -319,24 +377,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     for (int i = 0; i < 5; i++) cap >> frame;
 
     CascadeClassifier face_cascade;
-    if (!face_cascade.load(paths::haarcascade)) {
-        g_modelLog += "Failed to load haarcascade from: " + paths::haarcascade + "\n";
+    if (!load_face_cascade(face_cascade, g_modelLog)) {
+        g_modelLog += "Using default face detector fallback.\n";
     }
 
     Faces face_processor(paths::embeds_file, paths::names_file);
 
     const int64_t embedding_dim = 128;
-    const double dropout = 0.1;
-    model::FaceRecognitionModel model(3, embedding_dim, dropout);
-
-    g_modelLog += "Loading model from: " + paths::model_file + "\n";
+    model::FaceNet model(11257, embedding_dim, model::LossType::TripletSemiHard, 64.0, 0.5, true);
+    const auto model_path = get_model_path();
+    g_modelLog += "Loading FaceNet model from: " + model_path.string() + "\n";
     bool model_loaded = false;
     try {
-        torch::load(model, paths::model_file);
-        g_modelLog += "Model loaded successfully.\n";
+        torch::load(model, model_path.string());
+        g_modelLog += "FaceNet model loaded successfully.\n";
         model_loaded = true;
     } catch (const c10::Error& e) {
-        g_modelLog += "Error loading model.\n";
+        g_modelLog += "Error loading FaceNet model: " + std::string(e.what()) + "\n";
     }
     model->to(g_device);
     model->eval();
