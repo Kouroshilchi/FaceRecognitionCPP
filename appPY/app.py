@@ -25,7 +25,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 try:
 
-    for candidate in ['model_weights.pt', '../models/model_weights.pt']:
+    for candidate in ['model_weights.pt', '../models/model_weights.pt' ,r"C:\Users\kuoro\Documents\GitHub\FaceRecognitionCPP\models\model_weights.pt"]:
         if os.path.exists(candidate):
             model = load_model(candidate, device)
             break
@@ -73,21 +73,21 @@ def get_embedding(face_img):
         face_tensor = transform(face_pil).unsqueeze(0).to(device)
         with torch.no_grad():
             emb = model(face_tensor)
-        emb = torch.nn.functional.normalize(emb, p=2, dim=1)
+        # emb = torch.nn.functional.normalize(emb, p=2, dim=1)
         return emb
     except Exception as e:
         print(f"Embedding error: {e}")
         return None
 
 
-def compare_embedding(emb, threshold=0.7, k=5):
+def compare_embedding(emb, threshold=0.7, k=3):
     if emb is None or index.ntotal == 0:
         return ["Unknown", 0]
 
     emb_np = emb.cpu().numpy().astype('float32')        
     distances, indices = index.search(emb_np, k=k)
     
-    print(f"Raw distances: {distances}")  # این رو اضافه کن
+    # print(f"Raw distances: {distances}")  
     
     class_sims = {}
     for dist, idx in zip(distances[0], indices[0]):
@@ -102,10 +102,10 @@ def compare_embedding(emb, threshold=0.7, k=5):
         if avg > best_sim:
             best_sim, best_name = avg, name
 
-    print(f"best_sim: {best_sim}, best_name: {best_name}")  # و این
+    # print(f"best_sim: {best_sim}, best_name: {best_name}")
     
     if best_sim > threshold:
-        similarity_percentage = (best_sim + 1.0) / 2.0 * 100
+        similarity_percentage = best_sim * 100
         return [best_name, round(similarity_percentage, 2)]
     return ["Unknown", 0]
 
@@ -133,6 +133,10 @@ class FaceRecognitionApp(ctk.CTk):
         self.add_treshold  = ctk.CTkEntry(self, placeholder_text='threshold (default: 0.7)')
         self.add_treshold.pack(pady=10)
 
+        self.set_treshold_button = ctk.CTkButton(self, text="Set Threshold", command=self.set_threshold)
+        self.set_treshold_button.pack(pady=10)
+
+
         self.cap     = None
         self.running = False
         self.thread  = None
@@ -142,10 +146,6 @@ class FaceRecognitionApp(ctk.CTk):
         if self.running:
             return
         try:
-            try:
-                self.tresh = float(self.add_treshold.get())
-            except Exception:
-                self.tresh = 0.7
 
             self.cap = cv2.VideoCapture(0)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
@@ -267,6 +267,9 @@ class FaceRecognitionApp(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    def set_threshold(self):
+
+        self.tresh = float(self.add_treshold.get())
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("dark")
