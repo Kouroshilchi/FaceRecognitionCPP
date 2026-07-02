@@ -85,12 +85,12 @@ namespace Loss
             loss = torch::tensor(0.0, embeddings.options());
         }
 
-        if (zero_count > valid_count * 0.5) {
-            std::cout << "[TripletLoss Semi-Hard] "
-                      << (100.0 * zero_count / valid_count)
-                      << "% zero-triplets | semi-hard used: "
-                      << semi_used << "/" << valid_count << "\n";
-        }
+        // if (zero_count > valid_count * 0.5) {
+        //     std::cout << "[TripletLoss Semi-Hard] "
+        //               << (100.0 * zero_count / valid_count)
+        //               << "% zero-triplets | semi-hard used: "
+        //               << semi_used << "/" << valid_count << "\n";
+        // }
 
         return {loss, avg_pos_dist, avg_neg_dist,
                 (int64_t)losses_valid.numel(), zero_count};
